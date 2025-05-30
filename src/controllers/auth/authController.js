@@ -1,12 +1,24 @@
 const User = require('../../models/User');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
+const crypto = require('crypto');
+const EmailService = require('../../services/emailService');
 
 // Generate JWT Token
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   });
+};
+
+// Helper function to generate verification token
+const generateVerificationToken = () => {
+  const token = crypto.randomBytes(32).toString('hex');
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+  return { token, hashedToken };
 };
 
 // @desc    Register a new customer
@@ -45,12 +57,17 @@ const signupCustomer = async (req, res) => {
       });
     }
 
-    // Create new customer
+    // Generate verification token
+    const { token, hashedToken } = generateVerificationToken();
+
+    // Create new customer with verification token
     const newCustomer = new User({
       email,
       password,
       phoneNumber,
       role: 'customer',
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
       customerProfile: {
         fullName,
         gender,
@@ -66,20 +83,22 @@ const signupCustomer = async (req, res) => {
     // Save customer to database
     await newCustomer.save();
 
-    // Generate JWT token
-    const token = generateToken(newCustomer._id);
+    // Send verification email
+    const origin = `${req.protocol}://${req.get('host')}`;
+    await EmailService.sendVerificationEmail(email, token, origin);
 
     // Remove password and unwanted profiles from response
     const customerResponse = newCustomer.toObject();
     delete customerResponse.password;
-    delete customerResponse.vendorProfile; // Remove vendor profile for customers
+    delete customerResponse.vendorProfile;
+    delete customerResponse.emailVerificationToken;
+    delete customerResponse.emailVerificationExpires;
 
     res.status(201).json({
       success: true,
-      message: 'Customer registered successfully',
+      message: 'Customer registered successfully. Please check your email to verify your account.',
       data: {
-        user: customerResponse,
-        token
+        user: customerResponse
       }
     });
 
@@ -139,12 +158,17 @@ const signupVendor = async (req, res) => {
       });
     }
 
-    // Create new vendor
+    // Generate verification token
+    const { token, hashedToken } = generateVerificationToken();
+
+    // Create new vendor with verification token
     const newVendor = new User({
       email,
       password,
       phoneNumber,
       role: 'vendor',
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
       vendorProfile: {
         businessName,
         ownerName,
@@ -170,20 +194,22 @@ const signupVendor = async (req, res) => {
     // Save vendor to database
     await newVendor.save();
 
-    // Generate JWT token
-    const token = generateToken(newVendor._id);
+    // Send verification email
+    const origin = `${req.protocol}://${req.get('host')}`;
+    await EmailService.sendVerificationEmail(email, token, origin);
 
     // Remove password and unwanted profiles from response
     const vendorResponse = newVendor.toObject();
     delete vendorResponse.password;
-    delete vendorResponse.customerProfile; // Remove customer profile for vendors
+    delete vendorResponse.customerProfile;
+    delete vendorResponse.emailVerificationToken;
+    delete vendorResponse.emailVerificationExpires;
 
     res.status(201).json({
       success: true,
-      message: 'Vendor registered successfully. Profile pending approval.',
+      message: 'Vendor registered successfully. Please check your email to verify your account.',
       data: {
-        user: vendorResponse,
-        token
+        user: vendorResponse
       }
     });
 
@@ -233,6 +259,24 @@ const login = async (req, res) => {
       });
     }
 
+    // Check if email is verified - strict check
+    if (!user.emailVerified) {
+      // Generate new verification token if the old one is expired
+      const { token, hashedToken } = generateVerificationToken();
+      user.emailVerificationToken = hashedToken;
+      user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+      await user.save({ validateBeforeSave: false });
+
+      // Send new verification email
+      const origin = `${req.protocol}://${req.get('host')}`;
+      await EmailService.sendVerificationEmail(user.email, token, origin);
+
+      return res.status(401).json({
+        success: false,
+        message: 'Please verify your email before logging in. A new verification email has been sent to your email address.'
+      });
+    }
+
     // Check if account is active
     if (!user.isActive) {
       return res.status(401).json({
@@ -257,9 +301,13 @@ const login = async (req, res) => {
     // Generate JWT token
     const token = generateToken(user._id);
 
-    // Remove password and unwanted profiles from response
+    // Remove sensitive information from response
     const userResponse = user.toObject();
     delete userResponse.password;
+    delete userResponse.emailVerificationToken;
+    delete userResponse.emailVerificationExpires;
+    delete userResponse.passwordResetToken;
+    delete userResponse.passwordResetExpires;
     
     // Remove unwanted profile based on role
     if (user.role === 'customer') {
@@ -287,8 +335,276 @@ const login = async (req, res) => {
   }
 };
 
+// @desc    Request password reset
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { email } = req.body;
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      // Return 200 to prevent email enumeration
+      return res.status(200).json({
+        success: true,
+        message: 'If a user exists with this email, they will receive password reset instructions.'
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    // Save hashed token
+    user.passwordResetToken = hashedToken;
+    user.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save({ validateBeforeSave: false });
+
+    // Send reset email
+    const origin = `${req.protocol}://${req.get('host')}`;
+    await EmailService.sendPasswordResetEmail(email, resetToken, origin);
+
+    res.status(200).json({
+      success: true,
+      message: 'If a user exists with this email, they will receive password reset instructions.'
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'There was an error sending the password reset email. Please try again later.'
+    });
+  }
+};
+
+// @desc    Verify reset token
+// @route   GET /api/auth/reset-password/:token
+// @access  Public
+const verifyResetToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password reset token is invalid or has expired'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Token is valid'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error verifying reset token'
+    });
+  }
+};
+
+// @desc    Reset password
+// @route   POST /api/auth/reset-password/:token
+// @access  Public
+const resetPassword = async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { token } = req.params;
+    const { password } = req.body;
+
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password reset token is invalid or has expired'
+      });
+    }
+
+    // Update password
+    user.password = password;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+
+    // Send confirmation email
+    await EmailService.sendPasswordResetConfirmation(user.email);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully'
+    });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error resetting password'
+    });
+  }
+};
+
+// @desc    Verify email and auto-login
+// @route   GET /api/auth/verify-email/:token
+// @access  Public
+const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    const user = await User.findOne({
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired verification link'
+      });
+    }
+
+    // Update user
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
+    // Generate JWT token for auto-login
+    const authToken = generateToken(user._id);
+
+    // Send success email
+    await EmailService.sendVerificationSuccessEmail(user.email);
+
+    // Remove sensitive information from response
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    delete userResponse.emailVerificationToken;
+    delete userResponse.emailVerificationExpires;
+    delete userResponse.passwordResetToken;
+    delete userResponse.passwordResetExpires;
+
+    // Remove unwanted profile based on role
+    if (user.role === 'customer') {
+      delete userResponse.vendorProfile;
+    } else if (user.role === 'vendor') {
+      delete userResponse.customerProfile;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully. You are now logged in.',
+      data: {
+        user: userResponse,
+        token: authToken
+      }
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error verifying email'
+    });
+  }
+};
+
+// New resend verification email endpoint
+const resendVerificationEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already verified'
+      });
+    }
+
+    // Generate new verification token
+    const { token, hashedToken } = generateVerificationToken();
+
+    // Update user with new token
+    user.emailVerificationToken = hashedToken;
+    user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    await user.save();
+
+    // Send new verification email
+    const origin = `${req.protocol}://${req.get('host')}`;
+    await EmailService.sendVerificationEmail(email, token, origin);
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification email sent successfully'
+    });
+  } catch (error) {
+    console.error('Resend verification email error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error sending verification email'
+    });
+  }
+};
+
 module.exports = {
   signupCustomer,
   signupVendor,
-  login
+  login,
+  forgotPassword,
+  verifyResetToken,
+  resetPassword,
+  verifyEmail,
+  resendVerificationEmail
 }; 

@@ -119,7 +119,7 @@ const validateVendorSignup = [
     .withMessage('Please select a valid timezone')
 ];
 
-// Login validation
+
 const validateLogin = [
   emailValidation,
   
@@ -128,8 +128,29 @@ const validateLogin = [
     .withMessage('Password is required')
 ];
 
+// Password reset validation rules
+const validateForgotPassword = [
+  emailValidation
+];
+
+const validateResetPassword = [
+  passwordValidation,
+  
+  body('passwordConfirm')
+    .notEmpty()
+    .withMessage('Password confirmation is required')
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    })
+];
+
 module.exports = {
   validateCustomerSignup,
   validateVendorSignup,
-  validateLogin
+  validateLogin,
+  validateForgotPassword,
+  validateResetPassword
 }; 

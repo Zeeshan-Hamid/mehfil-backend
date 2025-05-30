@@ -84,6 +84,16 @@ const userSchema = new mongoose.Schema({
     type: Date
   },
   
+  emailVerificationToken: {
+    type: String,
+    select: false
+  },
+  
+  emailVerificationExpires: {
+    type: Date,
+    select: false
+  },
+  
   // CUSTOMER-SPECIFIC FIELDS (only populated when role = 'customer')
   customerProfile: {
     fullName: {
