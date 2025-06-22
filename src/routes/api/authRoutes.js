@@ -18,6 +18,8 @@ const {
   validateForgotPassword,
   validateResetPassword
 } = require('../../validators/authValidators');
+const passport = require('passport');
+const jwt = require('jsonwebtoken');
 
 // Rate limiting middleware
 const rateLimit = require('express-rate-limit');
@@ -33,6 +35,14 @@ const emailVerificationLimiter = rateLimit({
   message: 'Too many verification email requests. Please try again in an hour.'
 });
 
+// Generate JWT Token
+// This helper function can be moved to a shared utility file later
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  });
+};
+
 // @route   POST /api/auth/signup/customer
 // @desc    Register a new customer
 // @access  Public
@@ -47,6 +57,43 @@ router.post('/signup/vendor', validateVendorSignup, signupVendor);
 // @desc    Login user (customer/vendor/admin)
 // @access  Public
 router.post('/login', validateLogin, login);
+
+// Google OAuth Routes
+// @route   GET /api/auth/google/customer
+// @desc    Initiate Google login for customers
+// @access  Public
+router.get('/google/customer', passport.authenticate('google', {
+  state: 'customer',
+  session: false
+}));
+
+// @route   GET /api/auth/google/vendor
+// @desc    Initiate Google login for vendors
+// @access  Public
+router.get('/google/vendor', passport.authenticate('google', {
+  state: 'vendor',
+  session: false
+}));
+
+// @route   GET /api/auth/google/callback
+// @desc    Google OAuth callback URL
+// @access  Public
+router.get('/google/callback',
+  passport.authenticate('google', { session: false, failureRedirect: '/login-failed' }),
+  (req, res) => {
+    // On successful authentication, the user object is attached to req.user
+    const token = generateToken(req.user._id);
+
+    // For backend testing, we'll just return the user and token as JSON
+    // In a real app, you might redirect to a frontend URL with the token
+    res.json({
+      success: true,
+      message: 'Successfully authenticated with Google',
+      token: token,
+      user: req.user
+    });
+  }
+);
 
 // Email Verification Routes
 router.get('/verify-email/:token', verifyEmail);

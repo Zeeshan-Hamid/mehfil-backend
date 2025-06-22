@@ -22,7 +22,7 @@ const userSchema = new mongoose.Schema({
   
   phoneNumber: {
     type: String,
-    required: [true, 'Phone number is required'],
+    required: function() { return this.authProvider === 'email'; },
     trim: true
   },
   
@@ -98,7 +98,7 @@ const userSchema = new mongoose.Schema({
   customerProfile: {
     fullName: {
       type: String,
-      required: function() { return this.role === 'customer'; },
+      required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
       trim: true,
       maxlength: [100, 'Full name cannot exceed 100 characters']
     },
@@ -106,23 +106,23 @@ const userSchema = new mongoose.Schema({
     gender: {
       type: String,
       enum: ['male', 'female', 'prefer_not_to_say'],
-      required: function() { return this.role === 'customer'; }
+      required: function() { return this.role === 'customer' && this.authProvider === 'email'; }
     },
     
     location: {
       city: {
         type: String,
-        required: function() { return this.role === 'customer'; },
+        required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
         trim: true
       },
       state: {
         type: String,
-        required: function() { return this.role === 'customer'; },
+        required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
         trim: true
       },
       country: {
         type: String,
-        required: function() { return this.role === 'customer'; },
+        required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
         trim: true,
         default: 'United States'
       },
@@ -183,14 +183,14 @@ const userSchema = new mongoose.Schema({
   vendorProfile: {
     businessName: {
       type: String,
-      required: function() { return this.role === 'vendor'; },
+      required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
       trim: true,
       maxlength: [200, 'Business name cannot exceed 200 characters']
     },
     
     ownerName: {
       type: String,
-      required: function() { return this.role === 'vendor'; },
+      required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
       trim: true,
       maxlength: [100, 'Owner name cannot exceed 100 characters']
     },
@@ -199,35 +199,35 @@ const userSchema = new mongoose.Schema({
     businessAddress: {
       street: {
         type: String,
-        required: function() { return this.role === 'vendor'; },
+        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
         trim: true
       },
       city: {
         type: String,
-        required: function() { return this.role === 'vendor'; },
+        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
         trim: true
       },
       state: {
         type: String,
-        required: function() { return this.role === 'vendor'; },
+        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
         trim: true
       },
       country: {
         type: String,
-        required: function() { return this.role === 'vendor'; },
+        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
         trim: true,
         default: 'United States'
       },
       zipCode: {
         type: String,
-        required: function() { return this.role === 'vendor'; },
+        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
         trim: true
       }
     },
     
     timezone: {
       type: String,
-      required: function() { return this.role === 'vendor'; },
+      required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
       enum: ['America/New_York', 'Europe/London', 'America/Los_Angeles', 'America/Chicago', 'America/Denver', 'America/Phoenix'],
       default: 'America/New_York'
     },
@@ -924,4 +924,26 @@ userSchema.virtual('displayName').get(function() {
   return this.email;
 });
 
-module.exports = mongoose.model('User', userSchema); 
+// Use a toJSON transform to customize the output of the user object
+userSchema.set('toJSON', {
+  virtuals: true, // ensure virtuals like 'id' are included
+  transform: (doc, ret) => {
+    // 'ret' is the plain object that will be sent as JSON
+
+    // Based on the user's role, remove the profile that is not relevant
+    if (ret.role === 'customer') {
+      delete ret.vendorProfile;
+    } else if (ret.role === 'vendor') {
+      delete ret.customerProfile;
+    }
+
+    // Also remove the internal version key for a cleaner output
+    delete ret.__v;
+
+    return ret;
+  },
+});
+
+const User = mongoose.model('User', userSchema);
+
+module.exports = User; 
