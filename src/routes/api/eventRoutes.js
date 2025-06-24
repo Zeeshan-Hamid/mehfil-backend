@@ -13,4 +13,18 @@ router.post(
   eventController.createEvent
 );
 
+router
+  .route('/:id')
+  .get(eventController.getEvent)
+  .patch(
+    protect,
+    restrictTo('vendor'),
+    eventController.updateEvent
+  )
+  .delete(
+    protect,
+    restrictTo('vendor'),
+    eventController.deleteEvent
+  );
+
 module.exports = router; 
