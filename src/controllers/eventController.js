@@ -1,4 +1,5 @@
 const Event = require('../models/Event');
+const { processAndUploadImages } = require('../services/fileUploadService');
 
 // A simplified error handler
 const catchAsync = fn => {
@@ -14,8 +15,36 @@ exports.createEvent = catchAsync(async (req, res, next) => {
   // The vendor's ID is attached to the request by the 'protect' middleware
   const vendorId = req.user.id;
 
+  // 1. Check if files were uploaded
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'You must upload at least one image for the event.'
+    });
+  }
+
+  // 2. Process and upload images, get back the S3 URLs
+  const imageUrls = await processAndUploadImages(req.files, vendorId);
+
+  // 3. Parse stringified JSON fields from form-data
+  const eventData = { ...req.body };
+  if (eventData.packages) {
+    eventData.packages = JSON.parse(eventData.packages);
+  }
+  if (eventData.location) {
+    eventData.location = JSON.parse(eventData.location);
+  }
+  if (eventData.services) {
+    eventData.services = JSON.parse(eventData.services);
+  }
+  if (eventData.tags) {
+    eventData.tags = JSON.parse(eventData.tags);
+  }
+
+  // 4. Create the event
   const newEvent = await Event.create({
-    ...req.body,
+    ...eventData,
+    imageUrls,
     vendor: vendorId // Ensure the event is linked to the logged-in vendor
   });
 
@@ -77,7 +106,22 @@ exports.updateEvent = catchAsync(async (req, res, next) => {
     delete req.body.vendor;
   }
 
-  event = await Event.findByIdAndUpdate(req.params.id, req.body, {
+  const eventData = { ...req.body };
+
+  // Parse stringified JSON fields from form-data
+  if (eventData.packages) eventData.packages = JSON.parse(eventData.packages);
+  if (eventData.location) eventData.location = JSON.parse(eventData.location);
+  if (eventData.services) eventData.services = JSON.parse(eventData.services);
+  if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
+  
+  // Process and upload new images if they exist
+  if (req.files && req.files.length > 0) {
+    const newImageUrls = await processAndUploadImages(req.files, req.user.id);
+    // Add new URLs to the existing ones
+    eventData.imageUrls = event.imageUrls.concat(newImageUrls);
+  }
+
+  event = await Event.findByIdAndUpdate(req.params.id, eventData, {
     new: true, // Return the updated document
     runValidators: true // Run schema validators on update
   });
@@ -94,6 +138,8 @@ exports.updateEvent = catchAsync(async (req, res, next) => {
 // @route   DELETE /api/events/:id
 // @access  Private (Owner vendor only)
 exports.deleteEvent = catchAsync(async (req, res, next) => {
+  // Note: This does not delete images from the S3 bucket.
+  // A professional implementation would also trigger a delete operation on S3.
   const event = await Event.findById(req.params.id);
 
   if (!event) {
@@ -115,6 +161,6 @@ exports.deleteEvent = catchAsync(async (req, res, next) => {
 
   res.status(204).json({
     status: 'success',
-    data: null
+    message: 'Event deleted successfully'
   });
 }); 

@@ -1,4 +1,21 @@
 require('dotenv').config();
+
+// Validate essential environment variables
+const requiredEnvVars = [
+  'MONGODB_URI',
+  'JWT_SECRET',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_KEY',
+  'AWS_REGION',
+  'S3_BUCKET_NAME'
+];
+
+for (const varName of requiredEnvVars) {
+  if (!process.env[varName]) {
+    throw new Error(`Environment variable ${varName} is missing.`);
+  }
+}
+
 const express = require('express');
 const cors = require('cors');
 const passport = require('passport');

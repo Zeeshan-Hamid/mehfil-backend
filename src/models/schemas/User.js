@@ -813,6 +813,9 @@ userSchema.index({ 'vendorProfile.geo': '2dsphere' });
 userSchema.index({ 'vendorProfile.halalCertification.status': 1 });
 userSchema.index({ 'customerProfile.preferences.eventTypes': 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ 'socialLogin.googleId': 1 }, { sparse: true });
+userSchema.index({ 'socialLogin.facebookId': 1 }, { sparse: true });
+userSchema.index({ 'vendorProfile.geo': '2dsphere' });
 
 // Pre-save middleware to clean profiles based on role
 userSchema.pre('save', function(next) {
