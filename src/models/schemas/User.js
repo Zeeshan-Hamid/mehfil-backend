@@ -136,7 +136,15 @@ const userSchema = new mongoose.Schema({
       type: String,
       default: null
     },
-    
+    customerCart: [{
+      event: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Event',
+        required: true,
+      },
+      quantity: { type: Number, default: 1 },
+      addedAt: { type: Date, default: Date.now }
+    }],
     preferences: {
       eventTypes: {
         type: [String],

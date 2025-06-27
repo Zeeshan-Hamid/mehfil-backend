@@ -60,10 +60,15 @@ exports.createEvent = catchAsync(async (req, res, next) => {
 // @route   GET /api/events/:id
 // @access  Public
 exports.getEvent = catchAsync(async (req, res, next) => {
-  const event = await Event.findById(req.params.id).populate({
-    path: 'reviews.user',
-    select: 'customerProfile.fullName customerProfile.profileImage' // Populate reviewer's name and image
-  });
+  const event = await Event.findById(req.params.id)
+    .populate({
+      path: 'reviews.user',
+      select: 'customerProfile.fullName customerProfile.profileImage'
+    })
+    .populate({
+      path: 'vendor',
+      select: 'vendorProfile.ownerName role'
+    });
 
   if (!event) {
     return res.status(404).json({
