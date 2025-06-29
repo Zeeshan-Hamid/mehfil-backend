@@ -168,4 +168,122 @@ exports.deleteEvent = catchAsync(async (req, res, next) => {
     status: 'success',
     message: 'Event deleted successfully'
   });
+});
+
+// @desc    Get all active events from all vendors (for customer browsing)
+// @route   GET /api/events
+// @access  Public
+exports.getAllEvents = catchAsync(async (req, res, next) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  // The query object is now empty, so it will find all events.
+  const query = {};
+
+  const events = await Event.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate({
+      path: 'vendor',
+      select: 'vendorProfile.businessName vendorProfile.profileImage'
+    });
+
+  const totalEvents = await Event.countDocuments(query);
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      events,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalEvents / limit),
+        totalEvents,
+        hasNextPage: skip + events.length < totalEvents,
+        hasPrevPage: page > 1
+      }
+    }
+  });
+});
+
+// @desc    Get all active events for a specific vendor (for public vendor profile)
+// @route   GET /api/events/vendor/:vendorId
+// @access  Public
+exports.getEventsByVendorPublic = catchAsync(async (req, res, next) => {
+  const { vendorId } = req.params;
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  // The query now only filters by vendorId, not status.
+  const query = { vendor: vendorId };
+
+  const events = await Event.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate({
+      path: 'vendor',
+      select: 'vendorProfile.businessName'
+    });
+
+  const totalEvents = await Event.countDocuments(query);
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      events,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalEvents / limit),
+        totalEvents,
+        hasNextPage: skip + events.length < totalEvents,
+        hasPrevPage: page > 1
+      }
+    }
+  });
+});
+
+// @desc    Get all events for the LOGGED-IN vendor (for their dashboard)
+// @route   GET /api/events/my-events
+// @access  Private (Vendors only)
+exports.getVendorEvents = catchAsync(async (req, res) => {
+  // Get pagination parameters from query string with defaults
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  // Get filter parameters
+  const status = req.query.status; // 'active', 'draft', 'archived'
+  
+  // Build query
+  const query = { vendor: req.user.id }; // Only get events for the logged-in vendor
+  if (status) {
+    query.status = status;
+  }
+
+  // Execute query with pagination
+  const events = await Event.find(query)
+    .sort({ createdAt: -1 }) // Sort by newest first
+    .skip(skip)
+    .limit(limit)
+    .populate('vendor', 'vendorProfile.businessName vendorProfile.ownerName');
+
+  // Get total count for pagination
+  const totalEvents = await Event.countDocuments(query);
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      events,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalEvents / limit),
+        totalEvents,
+        hasNextPage: skip + events.length < totalEvents,
+        hasPrevPage: page > 1
+      }
+    }
+  });
 }); 

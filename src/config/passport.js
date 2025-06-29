@@ -19,7 +19,12 @@ module.exports = function(passport) {
 
           if (user) {
             // User exists, log them in
-            return done(null, user);
+            // Add profileCompleted to the response
+            const userResponse = user.toObject();
+            userResponse.profileCompleted = user.role === 'customer' ? 
+              user.customerProfile.profileCompleted : 
+              user.vendorProfile.profileCompleted;
+            return done(null, userResponse);
           }
 
           // If not, check if they signed up with this email before
@@ -30,7 +35,12 @@ module.exports = function(passport) {
             user.socialLogin.googleId = profile.id;
             user.authProvider = 'google';
             await user.save({ validateBeforeSave: false });
-            return done(null, user);
+            // Add profileCompleted to the response
+            const userResponse = user.toObject();
+            userResponse.profileCompleted = user.role === 'customer' ? 
+              user.customerProfile.profileCompleted : 
+              user.vendorProfile.profileCompleted;
+            return done(null, userResponse);
           }
           
           // If user doesn't exist, create a new one
@@ -63,7 +73,8 @@ module.exports = function(passport) {
                 genderPreference: null,
                 culturalPreferences: []
               },
-              preferredVendors: []
+              preferredVendors: [],
+              profileCompleted: false // Initialize as false for new users
             };
           }
 
@@ -145,12 +156,18 @@ module.exports = function(passport) {
                   insuranceVerified: false
               },
               team: [],
-              tags: []
+              tags: [],
+              profileCompleted: false // Initialize as false for new users
             };
           }
 
           await newUser.save({ validateBeforeSave: false });
-          done(null, newUser);
+          // Add profileCompleted to the response
+          const newUserResponse = newUser.toObject();
+          newUserResponse.profileCompleted = role === 'customer' ? 
+            newUser.customerProfile.profileCompleted : 
+            newUser.vendorProfile.profileCompleted;
+          done(null, newUserResponse);
 
         } catch (err) {
           console.error('Google Strategy Error:', err);

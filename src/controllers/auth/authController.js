@@ -94,6 +94,9 @@ const signupCustomer = async (req, res) => {
     delete customerResponse.emailVerificationToken;
     delete customerResponse.emailVerificationExpires;
 
+    // Add profileCompleted flag to response
+    customerResponse.profileCompleted = customerResponse.customerProfile.profileCompleted;
+
     res.status(201).json({
       success: true,
       message: 'Customer registered successfully. Please check your email to verify your account.',
@@ -205,6 +208,9 @@ const signupVendor = async (req, res) => {
     delete vendorResponse.emailVerificationToken;
     delete vendorResponse.emailVerificationExpires;
 
+    // Add profileCompleted flag to response
+    vendorResponse.profileCompleted = vendorResponse.vendorProfile.profileCompleted;
+
     res.status(201).json({
       success: true,
       message: 'Vendor registered successfully. Please check your email to verify your account.',
@@ -309,11 +315,13 @@ const login = async (req, res) => {
     delete userResponse.passwordResetToken;
     delete userResponse.passwordResetExpires;
     
-    // Remove unwanted profile based on role
+    // Remove unwanted profile based on role and add profileCompleted flag
     if (user.role === 'customer') {
       delete userResponse.vendorProfile;
+      userResponse.profileCompleted = userResponse.customerProfile.profileCompleted;
     } else if (user.role === 'vendor') {
       delete userResponse.customerProfile;
+      userResponse.profileCompleted = userResponse.vendorProfile.profileCompleted;
     }
 
     res.status(200).json({
@@ -528,11 +536,13 @@ const verifyEmail = async (req, res) => {
     delete userResponse.passwordResetToken;
     delete userResponse.passwordResetExpires;
 
-    // Remove unwanted profile based on role
+    // Remove unwanted profile based on role and add profileCompleted flag
     if (user.role === 'customer') {
       delete userResponse.vendorProfile;
+      userResponse.profileCompleted = userResponse.customerProfile.profileCompleted;
     } else if (user.role === 'vendor') {
       delete userResponse.customerProfile;
+      userResponse.profileCompleted = userResponse.vendorProfile.profileCompleted;
     }
 
     res.status(200).json({

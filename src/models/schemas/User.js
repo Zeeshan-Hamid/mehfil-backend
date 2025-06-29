@@ -1,838 +1,580 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
-const findZone = require('zipcode-to-timezone');
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const findZone = require("zipcode-to-timezone");
 
-const userSchema = new mongoose.Schema({
-  // Common fields for all user types
-  email: {
-    type: String,
-    required: [true, 'Email is required'],
-    unique: true,
-    lowercase: true,
-    trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
-  },
-  
-  password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minlength: [8, 'Password must be at least 8 characters'],
-    select: false
-  },
-  
-  phoneNumber: {
-    type: String,
-    required: function() { return this.authProvider === 'email'; },
-    trim: true
-  },
-  
-  role: {
-    type: String,
-    enum: ['customer', 'vendor', 'admin'],
-    required: [true, 'User role is required']
-  },
-  
-  // Authentication & Security (Common)
-  authProvider: {
-    type: String,
-    enum: ['email', 'google', 'facebook'],
-    default: 'email'
-  },
-  
-  passwordResetToken: {
-    type: String,
-    select: false
-  },
-  
-  passwordResetExpires: {
-    type: Date,
-    select: false
-  },
-  
-  socialLogin: {
-    googleId: {
+const userSchema = new mongoose.Schema(
+  {
+    // Common fields for all user types
+    email: {
       type: String,
-      sparse: true
-    },
-    facebookId: {
-      type: String,
-      sparse: true
-    }
-  },
-  
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  
-  emailVerified: {
-    type: Boolean,
-    default: false
-  },
-  
-  phoneVerified: {
-    type: Boolean,
-    default: false
-  },
-  
-  twoFactorEnabled: {
-    type: Boolean,
-    default: false
-  },
-  
-  lastLogin: {
-    type: Date
-  },
-  
-  emailVerificationToken: {
-    type: String,
-    select: false
-  },
-  
-  emailVerificationExpires: {
-    type: Date,
-    select: false
-  },
-  
-  // CUSTOMER-SPECIFIC FIELDS (only populated when role = 'customer')
-  customerProfile: {
-    fullName: {
-      type: String,
-      required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
+      required: [true, "Email is required"],
+      unique: true,
+      lowercase: true,
       trim: true,
-      maxlength: [100, 'Full name cannot exceed 100 characters']
+      match: [
+        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+        "Please enter a valid email",
+      ],
     },
-    
-    gender: {
+
+    password: {
       type: String,
-      enum: ['male', 'female', 'prefer_not_to_say'],
-      required: function() { return this.role === 'customer' && this.authProvider === 'email'; }
+      required: [true, "Password is required"],
+      minlength: [8, "Password must be at least 8 characters"],
+      select: false,
     },
-    
-    location: {
-      city: {
-        type: String,
-        required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
-        trim: true
+
+    phoneNumber: {
+      type: String,
+      required: function () {
+        return this.authProvider === "email";
       },
-      state: {
+      trim: true,
+    },
+
+    role: {
+      type: String,
+      enum: ["customer", "vendor", "admin"],
+      required: [true, "User role is required"],
+    },
+
+    // Authentication & Security (Common)
+    authProvider: {
+      type: String,
+      enum: ["email", "google", "facebook"],
+      default: "email",
+    },
+
+    passwordResetToken: {
+      type: String,
+      select: false,
+    },
+
+    passwordResetExpires: {
+      type: Date,
+      select: false,
+    },
+
+    socialLogin: {
+      googleId: {
         type: String,
-        required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
-        trim: true
+        sparse: true,
       },
-      country: {
+      facebookId: {
         type: String,
-        required: function() { return this.role === 'customer' && this.authProvider === 'email'; },
+        sparse: true,
+      },
+    },
+
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    phoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+
+    lastLogin: {
+      type: Date,
+    },
+
+    emailVerificationToken: {
+      type: String,
+      select: false,
+    },
+
+    emailVerificationExpires: {
+      type: Date,
+      select: false,
+    },
+
+    // CUSTOMER-SPECIFIC FIELDS (only populated when role = 'customer')
+    customerProfile: {
+      fullName: {
+        type: String,
+        required: function () {
+          return this.role === "customer" && this.authProvider === "email";
+        },
         trim: true,
-        default: 'United States'
+        maxlength: [100, "Full name cannot exceed 100 characters"],
       },
-      zipCode: {
+
+      gender: {
         type: String,
-        trim: true
-      }
-    },
-    
-    profileImage: {
-      type: String,
-      default: null
-    },
-    customerCart: [{
-      event: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Event',
-        required: true,
-      },
-      quantity: { type: Number, default: 1 },
-      addedAt: { type: Date, default: Date.now }
-    }],
-    profileCompleted: {
-      type: Boolean,
-      default: false
-    },
-    preferences: {
-      eventTypes: {
-        type: [String],
-        enum: ['wedding', 'engagement', 'aqeeqah', 'nikah', 'walima', 'mehendi', 'birthday', 'anniversary'],
-        default: []
-      },
-      budgetRange: {
-        min: {
-          type: Number,
-          min: 0
+        enum: ["male", "female", "prefer_not_to_say"],
+        required: function () {
+          return this.role === "customer" && this.authProvider === "email";
         },
-        max: {
-          type: Number,
-          min: 0
-        },
-        currency: {
+      },
+
+      location: {
+        city: {
           type: String,
-          default: 'USD',
-          enum: ['USD', 'CAD', 'GBP', 'EUR']
-        }
-      },
-      preferredLanguages: {
-        type: [String],
-        default: ['English']
-      },
-      genderPreference: {
-        type: String,
-        enum: ['mixed', 'female_only', 'male_only'],
-        default: 'mixed'
-      },
-      culturalPreferences: {
-        type: [String],
-        default: []
-      }
-    },
-    
-    preferredVendors: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    }]
-  },
-  
-  // VENDOR-SPECIFIC FIELDS (only populated when role = 'vendor')
-  vendorProfile: {
-    businessName: {
-      type: String,
-      required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-      trim: true,
-      maxlength: [200, 'Business name cannot exceed 200 characters']
-    },
-    
-    ownerName: {
-      type: String,
-      required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-      trim: true,
-      maxlength: [100, 'Owner name cannot exceed 100 characters']
-    },
-    
-    // Business Details
-    businessAddress: {
-      street: {
-        type: String,
-        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-        trim: true
-      },
-      city: {
-        type: String,
-        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-        trim: true
-      },
-      state: {
-        type: String,
-        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-        trim: true
-      },
-      country: {
-        type: String,
-        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-        trim: true,
-        default: 'United States'
-      },
-      zipCode: {
-        type: String,
-        required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-        trim: true
-      }
-    },
-    
-    timezone: {
-      type: String,
-      enum: ['America/New_York', 'Europe/London', 'America/Los_Angeles', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu'],
-      default: null
-    },
-    
-    businessRegistration: {
-      registrationNumber: {
-        type: String,
-        trim: true
-      },
-      registrationType: {
-        type: String,
-        enum: ['LLC', 'Corp', 'Sole Proprietorship', 'Partnership'],
-        trim: true
-      },
-      taxId: {
-        type: String,
-        trim: true
-      }
-    },
-    
-    // Geolocation for proximity-based search
-    geo: {
-      type: {
-        type: String,
-        enum: ['Point'],
-        default: 'Point'
-      },
-      coordinates: {
-        type: [Number], // [longitude, latitude]
-        default: [0, 0]
-      }
-    },
-    
-    // Service Information
-    primaryServiceCategory: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Category',
-      required: false // Will be required during profile completion, not signup
-    },
-    
-    serviceCategories: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Category'
-    }],
-    
-    serviceDescription: {
-      type: String,
-      required: false, // Will be required during profile completion, not signup
-      maxlength: [1000, 'Service description cannot exceed 1000 characters']
-    },
-    
-    experienceYears: {
-      type: Number,
-      required: false, // Will be required during profile completion, not signup
-      min: [0, 'Experience years cannot be negative'],
-      max: [50, 'Experience years cannot exceed 50']
-    },
-    
-    languagesSpoken: {
-      type: [String],
-      default: ['English']
-    },
-    
-    serviceAreas: {
-      type: [String],
-      required: false // Will be required during profile completion, not signup
-    },
-    
-    // Enhanced Halal Compliance with Status
-    halalCertification: {
-      hasHalalCert: {
-        type: Boolean,
-        default: false
-      },
-      certificationFile: {
-        type: String,
-        default: null
-      },
-      certificateNumber: {
-        type: String,
-        trim: true
-      },
-      expiryDate: {
-        type: Date
-      },
-      issuingAuthority: {
-        type: String,
-        trim: true
-      },
-      verifiedByAdmin: {
-        type: Boolean,
-        default: false
-      },
-      verificationDate: {
-        type: Date
-      },
-      status: {
-        type: String,
-        enum: ['certified', 'expired', 'unverified', 'self-declared', 'not-applicable'],
-        default: 'unverified'
-      },
-      renewalReminders: {
-        thirtyDays: {
-          type: Boolean,
-          default: false
-        },
-        sevenDays: {
-          type: Boolean,
-          default: false
-        },
-        oneDayBefore: {
-          type: Boolean,
-          default: false
-        }
-      }
-    },
-    
-    // Trust & Verification Badges
-    verifiedBadge: {
-      type: Boolean,
-      default: false
-    },
-    
-    halalVerifiedBadge: {
-      type: Boolean,
-      default: false
-    },
-    
-    // Portfolio & Media
-    portfolio: {
-      images: {
-        type: [String],
-        default: []
-      },
-      videos: {
-        type: [String],
-        default: []
-      },
-      description: {
-        type: String,
-        maxlength: [2000, 'Portfolio description cannot exceed 2000 characters']
-      },
-      beforeAfterPhotos: [{
-        before: {
-          type: String,
-          required: true
-        },
-        after: {
-          type: String,
-          required: true
-        },
-        description: {
-          type: String,
-          maxlength: [500, 'Before/after description cannot exceed 500 characters']
-        }
-      }]
-    },
-    
-    // Online Presence
-    socialLinks: {
-      website: {
-        type: String,
-        trim: true
-      },
-      instagram: {
-        type: String,
-        trim: true
-      },
-      facebook: {
-        type: String,
-        trim: true
-      },
-      twitter: {
-        type: String,
-        trim: true
-      },
-      youtube: {
-        type: String,
-        trim: true
-      },
-      linkedin: {
-        type: String,
-        trim: true
-      }
-    },
-    
-    // Availability & Scheduling with Timezone Support
-    availability: {
-      calendar: [{
-        date: {
-          type: Date,
-          required: true
-        },
-        isAvailable: {
-          type: Boolean,
-          default: true
-        },
-        timeSlots: [{
-          startTime: {
-            type: String,
-            required: true
+          required: function () {
+            return this.role === "customer" && this.authProvider === "email";
           },
-          endTime: {
-            type: String,
-            required: true
+          trim: true,
+        },
+        state: {
+          type: String,
+          required: function () {
+            return this.role === "customer" && this.authProvider === "email";
           },
-          isBooked: {
-            type: Boolean,
-            default: false
+          trim: true,
+        },
+        country: {
+          type: String,
+          required: function () {
+            return this.role === "customer" && this.authProvider === "email";
           },
-          bookingId: {
+          trim: true,
+          default: "United States",
+        },
+        zipCode: {
+          type: String,
+          trim: true,
+        },
+      },
+
+      profileImage: {
+        type: String,
+        default: null,
+      },
+      customerCart: [
+        {
+          event: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Booking'
-          }
-        }]
-      }],
-      workingDays: {
-        type: [String],
-        enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-        default: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-      },
-      workingHours: {
-        start: {
-          type: String,
-          default: '09:00'
+            ref: "Event",
+            required: true,
+          },
+          quantity: { type: Number, default: 1 },
+          addedAt: { type: Date, default: Date.now },
         },
-        end: {
-          type: String,
-          default: '18:00'
-        }
+      ],
+      profileCompleted: {
+        type: Boolean,
+        default: false,
       },
-      advanceBookingDays: {
-        type: Number,
-        default: 30,
-        min: [1, 'Advance booking days must be at least 1']
+      preferences: {
+        eventTypes: {
+          type: [String],
+          enum: [
+            "wedding",
+            "engagement",
+            "aqeeqah",
+            "nikah",
+            "walima",
+            "mehendi",
+            "birthday",
+            "anniversary",
+          ],
+          default: [],
+        },
+        budgetRange: {
+          min: {
+            type: Number,
+            min: 0,
+          },
+          max: {
+            type: Number,
+            min: 0,
+          },
+          currency: {
+            type: String,
+            default: "USD",
+            enum: ["USD", "CAD", "GBP", "EUR"],
+          },
+        },
+        preferredLanguages: {
+          type: [String],
+          default: ["English"],
+        },
       },
-      blackoutDates: [{
-        startDate: {
-          type: Date,
-          required: true
+
+      preferredVendors: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
         },
-        endDate: {
-          type: Date,
-          required: true
-        },
-        reason: {
-          type: String,
-          maxlength: [200, 'Blackout reason cannot exceed 200 characters']
-        }
-      }]
+      ],
     },
-    
-    // Enhanced Booking Rules
-    bookingRules: {
-      minNoticeHours: {
-        type: Number,
-        default: 24,
-        min: [1, 'Minimum notice hours must be at least 1']
-      },
-      cancellationPolicy: {
+
+    // VENDOR-SPECIFIC FIELDS (only populated when role = 'vendor')
+    vendorProfile: {
+      businessName: {
         type: String,
-        maxlength: [1000, 'Cancellation policy cannot exceed 1000 characters']
+        required: function () {
+          return this.role === "vendor" && this.authProvider === "email";
+        },
+        trim: true,
+        maxlength: [200, "Business name cannot exceed 200 characters"],
       },
-      depositRequired: {
-        type: Number,
-        min: [0, 'Deposit required cannot be negative']
-      },
-      depositPercentage: {
-        type: Number,
-        min: [0, 'Deposit percentage cannot be negative'],
-        max: [100, 'Deposit percentage cannot exceed 100']
-      },
-      paymentTerms: {
+
+      ownerName: {
         type: String,
-        maxlength: [500, 'Payment terms cannot exceed 500 characters']
-      }
-    },
-    
-    // Pricing & Financial
-    pricing: {
-      startingPrice: {
-        type: Number,
+        required: function () {
+          return this.role === "vendor" && this.authProvider === "email";
+        },
+        trim: true,
+        maxlength: [100, "Owner name cannot exceed 100 characters"],
+      },
+
+      // Business Details
+      businessAddress: {
+        street: {
+          type: String,
+          required: function () {
+            return this.role === "vendor" && this.authProvider === "email";
+          },
+          trim: true,
+        },
+        city: {
+          type: String,
+          required: function () {
+            return this.role === "vendor" && this.authProvider === "email";
+          },
+          trim: true,
+        },
+        state: {
+          type: String,
+          required: function () {
+            return this.role === "vendor" && this.authProvider === "email";
+          },
+          trim: true,
+        },
+        country: {
+          type: String,
+          required: function () {
+            return this.role === "vendor" && this.authProvider === "email";
+          },
+          trim: true,
+          default: "United States",
+        },
+        zipCode: {
+          type: String,
+          required: function () {
+            return this.role === "vendor" && this.authProvider === "email";
+          },
+          trim: true,
+        },
+      },
+
+      timezone: {
+        type: String,
+        enum: [
+          "America/New_York",
+          "Europe/London",
+          "America/Los_Angeles",
+          "America/Chicago",
+          "America/Denver",
+          "America/Phoenix",
+          "America/Anchorage",
+          "Pacific/Honolulu",
+        ],
+        default: null,
+      },
+
+      // Geolocation for proximity-based search
+      geo: {
+        type: {
+          type: String,
+          enum: ["Point"],
+          default: "Point",
+        },
+        coordinates: {
+          type: [Number], // [longitude, latitude]
+          default: [0, 0],
+        },
+      },
+
+      // Service Information
+      primaryServiceCategory: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
         required: false, // Will be required during profile completion, not signup
-        min: [0, 'Starting price cannot be negative']
       },
-      maxPrice: {
-        type: Number,
-        min: [0, 'Max price cannot be negative']
-      },
-      currency: {
-        type: String,
-        default: 'USD',
-        enum: ['USD', 'CAD', 'GBP', 'EUR']
-      },
-      pricingType: {
-        type: String,
-        enum: ['fixed', 'hourly', 'package', 'custom'],
-        required: false // Will be required during profile completion, not signup
-      },
-      packageDeals: [{
-        packageName: {
+
+      // Enhanced Halal Compliance with Status
+      halalCertification: {
+        hasHalalCert: {
+          type: Boolean,
+          default: false,
+        },
+        certificationFile: {
           type: String,
-          required: true,
-          trim: true
+          default: null,
+        },
+        certificateNumber: {
+          type: String,
+          trim: true,
+        },
+        expiryDate: {
+          type: Date,
+        },
+        issuingAuthority: {
+          type: String,
+          trim: true,
+        },
+        verifiedByAdmin: {
+          type: Boolean,
+          default: false,
+        },
+        verificationDate: {
+          type: Date,
+        },
+        status: {
+          type: String,
+          enum: [
+            "certified",
+            "expired",
+            "unverified",
+            "self-declared",
+            "not-applicable",
+          ],
+          default: "unverified",
+        },
+        renewalReminders: {
+          thirtyDays: {
+            type: Boolean,
+            default: false,
+          },
+          sevenDays: {
+            type: Boolean,
+            default: false,
+          },
+          oneDayBefore: {
+            type: Boolean,
+            default: false,
+          },
+        },
+      },
+
+      // Trust & Verification Badges
+      verifiedBadge: {
+        type: Boolean,
+        default: false,
+      },
+
+      halalVerifiedBadge: {
+        type: Boolean,
+        default: false,
+      },
+
+      // Portfolio & Media
+      portfolio: {
+        images: {
+          type: [String],
+          default: [],
+        },
+        videos: {
+          type: [String],
+          default: [],
         },
         description: {
           type: String,
-          maxlength: [500, 'Package description cannot exceed 500 characters']
+          maxlength: [
+            2000,
+            "Portfolio description cannot exceed 2000 characters",
+          ],
         },
-        price: {
-          type: Number,
-          required: true,
-          min: [0, 'Package price cannot be negative']
+        beforeAfterPhotos: [
+          {
+            before: {
+              type: String,
+              required: true,
+            },
+            after: {
+              type: String,
+              required: true,
+            },
+            description: {
+              type: String,
+              maxlength: [
+                500,
+                "Before/after description cannot exceed 500 characters",
+              ],
+            },
+          },
+        ],
+      },
+
+      // Online Presence
+      socialLinks: {
+        website: {
+          type: String,
+          trim: true,
         },
-        inclusions: {
-          type: [String],
-          default: []
-        }
-      }]
-    },
-    
-    // Bank & Payment Info
-    paymentInfo: {
-      bankAccountNumber: {
-        type: String,
-        trim: true,
-        select: false
-      },
-      routingNumber: {
-        type: String,
-        trim: true,
-        select: false
-      },
-      accountHolderName: {
-        type: String,
-        trim: true,
-        select: false
-      },
-      bankName: {
-        type: String,
-        trim: true,
-        select: false
-      },
-      stripeAccountId: {
-        type: String,
-        trim: true,
-        select: false
-      },
-      paypalEmail: {
-        type: String,
-        trim: true,
-        select: false
-      },
-      preferredPaymentMethod: {
-        type: String,
-        enum: ['bank_transfer', 'stripe', 'paypal'],
-        default: 'stripe'
-      }
-    },
-    
-    // Reviews & Ratings
-    rating: {
-      average: {
-        type: Number,
-        default: 0,
-        min: [0, 'Rating cannot be negative'],
-        max: [5, 'Rating cannot exceed 5']
-      },
-      totalReviews: {
-        type: Number,
-        default: 0,
-        min: [0, 'Total reviews cannot be negative']
-      },
-      breakdown: {
-        fiveStar: {
-          type: Number,
-          default: 0
+        instagram: {
+          type: String,
+          trim: true,
         },
-        fourStar: {
-          type: Number,
-          default: 0
+        facebook: {
+          type: String,
+          trim: true,
         },
-        threeStar: {
-          type: Number,
-          default: 0
+        twitter: {
+          type: String,
+          trim: true,
         },
-        twoStar: {
-          type: Number,
-          default: 0
+        youtube: {
+          type: String,
+          trim: true,
         },
-        oneStar: {
+        linkedin: {
+          type: String,
+          trim: true,
+        },
+      },
+
+      // Enhanced Booking Rules
+      bookingRules: {
+        minNoticeHours: {
           type: Number,
-          default: 0
-        }
-      }
-    },
-    
-    // Admin & Status
-    approvalStatus: {
-      type: String,
-      enum: ['pending', 'approved', 'rejected', 'suspended'],
-      default: 'pending'
-    },
-    
-    approvalHistory: [{
-      status: {
-        type: String,
-        enum: ['pending', 'approved', 'rejected', 'suspended'],
-        required: true
+          default: 24,
+          min: [1, "Minimum notice hours must be at least 1"],
+        },
+        cancellationPolicy: {
+          type: String,
+          maxlength: [
+            1000,
+            "Cancellation policy cannot exceed 1000 characters",
+          ],
+        },
+        depositRequired: {
+          type: Number,
+          min: [0, "Deposit required cannot be negative"],
+        },
+        depositPercentage: {
+          type: Number,
+          min: [0, "Deposit percentage cannot be negative"],
+          max: [100, "Deposit percentage cannot exceed 100"],
+        },
+        paymentTerms: {
+          type: String,
+          maxlength: [500, "Payment terms cannot exceed 500 characters"],
+        },
       },
-      changedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+
+      // Reviews & Ratings
+      rating: {
+        average: {
+          type: Number,
+          default: 0,
+          min: [0, "Rating cannot be negative"],
+          max: [5, "Rating cannot exceed 5"],
+        },
+        totalReviews: {
+          type: Number,
+          default: 0,
+          min: [0, "Total reviews cannot be negative"],
+        },
+        breakdown: {
+          fiveStar: {
+            type: Number,
+            default: 0,
+          },
+          fourStar: {
+            type: Number,
+            default: 0,
+          },
+          threeStar: {
+            type: Number,
+            default: 0,
+          },
+          twoStar: {
+            type: Number,
+            default: 0,
+          },
+          oneStar: {
+            type: Number,
+            default: 0,
+          },
+        },
       },
-      reason: {
-        type: String,
-        maxlength: [500, 'Approval reason cannot exceed 500 characters']
-      },
-      timestamp: {
-        type: Date,
-        default: Date.now
-      }
-    }],
-    
-    rejectionReason: {
-      type: String,
-      maxlength: [1000, 'Rejection reason cannot exceed 1000 characters']
-    },
-    
-    isFeatured: {
-      type: Boolean,
-      default: false
-    },
-    
-    featuredUntil: {
-      type: Date
-    },
-    
-    subscriptionTier: {
-      type: String,
-      enum: ['basic', 'premium', 'enterprise'],
-      default: 'basic'
-    },
-    
-    // Enhanced Performance Metrics
-    stats: {
-      totalBookings: {
-        type: Number,
-        default: 0,
-        min: [0, 'Total bookings cannot be negative']
-      },
-      completedBookings: {
-        type: Number,
-        default: 0,
-        min: [0, 'Completed bookings cannot be negative']
-      },
-      cancelledBookings: {
-        type: Number,
-        default: 0,
-        min: [0, 'Cancelled bookings cannot be negative']
-      },
-      responseTime: {
-        type: Number,
-        default: 0,
-        min: [0, 'Response time cannot be negative']
-      },
-      responseRate: {
-        type: Number,
-        default: 0,
-        min: [0, 'Response rate cannot be negative'],
-        max: [100, 'Response rate cannot exceed 100']
-      },
-      repeatCustomers: {
-        type: Number,
-        default: 0,
-        min: [0, 'Repeat customers cannot be negative']
-      }
-    },
-    
-    // Verification & Trust
-    verifications: {
-      businessVerified: {
+
+      isFeatured: {
         type: Boolean,
-        default: false
+        default: false,
       },
-      backgroundCheckComplete: {
+
+      // Enhanced Performance Metrics
+      stats: {
+        totalBookings: {
+          type: Number,
+          default: 0,
+          min: [0, "Total bookings cannot be negative"],
+        },
+        completedBookings: {
+          type: Number,
+          default: 0,
+          min: [0, "Completed bookings cannot be negative"],
+        },
+        cancelledBookings: {
+          type: Number,
+          default: 0,
+          min: [0, "Cancelled bookings cannot be negative"],
+        },
+      },
+
+      profileCompleted: {
         type: Boolean,
-        default: false
+        default: false,
       },
-      insuranceVerified: {
-        type: Boolean,
-        default: false
-      }
     },
-    
-    // Additional Business Features
-    team: [{
-      name: {
-        type: String,
-        required: true,
-        trim: true
-      },
-      role: {
-        type: String,
-        required: true,
-        trim: true
-      },
-      photo: {
-        type: String
-      },
-      bio: {
-        type: String,
-        maxlength: [500, 'Team member bio cannot exceed 500 characters']
-      }
-    }],
-    
-    // Search & Discovery
-    tags: {
-      type: [String],
-      default: []
-    },
-    
-    specialties: {
-      type: [String],
-      default: []
-    },
-    
-    awards: {
-      type: [String],
-      default: []
-    },
-    
-    certifications: {
-      type: [String],
-      default: []
-    },
-    
-    // Communication Preferences
-    communicationPrefs: {
-      emailNotifications: {
-        type: Boolean,
-        default: true
-      },
-      smsNotifications: {
-        type: Boolean,
-        default: true
-      },
-      pushNotifications: {
-        type: Boolean,
-        default: true
-      },
-      marketingEmails: {
-        type: Boolean,
-        default: false
-      }
-    },
-    
-    profileCompleted: {
-      type: Boolean,
-      default: false
-    }
+  },
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+);
 
 // Indexes for better performance
 userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
-userSchema.index({ 'customerProfile.location.city': 1 });
-userSchema.index({ 'vendorProfile.businessAddress.city': 1 });
-userSchema.index({ 'vendorProfile.primaryServiceCategory': 1 });
-userSchema.index({ 'vendorProfile.serviceCategories': 1 });
-userSchema.index({ 'vendorProfile.approvalStatus': 1 });
-userSchema.index({ 'vendorProfile.rating.average': -1 });
-userSchema.index({ 'vendorProfile.isFeatured': -1, createdAt: -1 });
-userSchema.index({ 'vendorProfile.geo': '2dsphere' });
-userSchema.index({ 'vendorProfile.halalCertification.status': 1 });
-userSchema.index({ 'customerProfile.preferences.eventTypes': 1 });
+userSchema.index({ "customerProfile.location.city": 1 });
+userSchema.index({ "vendorProfile.businessAddress.city": 1 });
+userSchema.index({ "vendorProfile.primaryServiceCategory": 1 });
+userSchema.index({ "vendorProfile.serviceCategories": 1 });
+userSchema.index({ "vendorProfile.approvalStatus": 1 });
+userSchema.index({ "vendorProfile.rating.average": -1 });
+userSchema.index({ "vendorProfile.isFeatured": -1, createdAt: -1 });
+userSchema.index({ "vendorProfile.geo": "2dsphere" });
+userSchema.index({ "vendorProfile.halalCertification.status": 1 });
+userSchema.index({ "customerProfile.preferences.eventTypes": 1 });
 userSchema.index({ createdAt: -1 });
-userSchema.index({ 'socialLogin.googleId': 1 }, { sparse: true });
-userSchema.index({ 'socialLogin.facebookId': 1 }, { sparse: true });
-userSchema.index({ 'vendorProfile.geo': '2dsphere' });
+userSchema.index({ "socialLogin.googleId": 1 }, { sparse: true });
+userSchema.index({ "socialLogin.facebookId": 1 }, { sparse: true });
+userSchema.index({ "vendorProfile.geo": "2dsphere" });
 
 // Pre-save middleware to handle automatic profile completion logic
-userSchema.pre('save', function(next) {
+userSchema.pre("save", function (next) {
   // --- Customer Profile Completion ---
-  if (this.role === 'customer' && this.customerProfile) {
+  if (this.role === "customer" && this.customerProfile) {
     const { fullName, gender, location } = this.customerProfile;
-    if (fullName && gender && location && location.city && location.state && location.country && location.zipCode) {
+    if (
+      fullName &&
+      this.phoneNumber &&
+      gender &&
+      location &&
+      location.city &&
+      location.state &&
+      location.country &&
+      location.zipCode
+    ) {
       this.customerProfile.profileCompleted = true;
     } else {
       this.customerProfile.profileCompleted = false;
@@ -840,23 +582,42 @@ userSchema.pre('save', function(next) {
   }
 
   // --- Vendor Profile Completion & Timezone ---
-  if (this.role === 'vendor' && this.vendorProfile) {
+  if (this.role === "vendor" && this.vendorProfile) {
     // 1. Automatically set timezone if zip code is present
-    if (this.vendorProfile.businessAddress && this.vendorProfile.businessAddress.zipCode) {
+    if (
+      this.vendorProfile.businessAddress &&
+      this.vendorProfile.businessAddress.zipCode
+    ) {
       try {
-        const zone = findZone.lookup(this.vendorProfile.businessAddress.zipCode);
+        const zone = findZone.lookup(
+          this.vendorProfile.businessAddress.zipCode
+        );
         if (zone) {
           this.vendorProfile.timezone = zone;
         }
       } catch (e) {
         // Ignore errors if zipcode is invalid, timezone will remain null
-        console.warn(`Could not find timezone for zip: ${this.vendorProfile.businessAddress.zipCode}`);
+        console.warn(
+          `Could not find timezone for zip: ${this.vendorProfile.businessAddress.zipCode}`
+        );
       }
     }
 
     // 2. Check for profile completion
-    const { businessName, ownerName, businessAddress, timezone } = this.vendorProfile;
-    if (businessName && ownerName && timezone && businessAddress && businessAddress.street && businessAddress.city && businessAddress.state && businessAddress.country && businessAddress.zipCode) {
+    const { businessName, ownerName, businessAddress, timezone } =
+      this.vendorProfile;
+    if (
+      businessName &&
+      ownerName &&
+      this.phoneNumber &&
+      timezone &&
+      businessAddress &&
+      businessAddress.street &&
+      businessAddress.city &&
+      businessAddress.state &&
+      businessAddress.country &&
+      businessAddress.zipCode
+    ) {
       this.vendorProfile.profileCompleted = true;
     } else {
       this.vendorProfile.profileCompleted = false;
@@ -867,20 +628,20 @@ userSchema.pre('save', function(next) {
 });
 
 // Pre-save middleware to clean profiles based on role
-userSchema.pre('save', function(next) {
+userSchema.pre("save", function (next) {
   // Remove unwanted profiles based on role
-  if (this.role === 'customer') {
+  if (this.role === "customer") {
     this.vendorProfile = undefined;
-  } else if (this.role === 'vendor') {
+  } else if (this.role === "vendor") {
     this.customerProfile = undefined;
   }
   next();
 });
 
 // Pre-save middleware to hash password
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+
   try {
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
@@ -891,62 +652,57 @@ userSchema.pre('save', async function(next) {
 });
 
 // Instance method to check password
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
 // Instance method to generate password reset token
-userSchema.methods.createPasswordResetToken = function() {
-  const resetToken = crypto.randomBytes(32).toString('hex');
-  
+userSchema.methods.createPasswordResetToken = function () {
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
   this.passwordResetToken = crypto
-    .createHash('sha256')
+    .createHash("sha256")
     .update(resetToken)
-    .digest('hex');
-  
+    .digest("hex");
+
   this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-  
+
   return resetToken;
 };
 
 // Virtual for customer full location
-userSchema.virtual('customerFullLocation').get(function() {
-  if (this.role !== 'customer' || !this.customerProfile.location) return null;
+userSchema.virtual("customerFullLocation").get(function () {
+  if (this.role !== "customer" || !this.customerProfile.location) return null;
   return `${this.customerProfile.location.city}, ${this.customerProfile.location.state}, ${this.customerProfile.location.country}`;
 });
 
 // Virtual for vendor full business address
-userSchema.virtual('vendorFullBusinessAddress').get(function() {
-  if (this.role !== 'vendor' || !this.vendorProfile.businessAddress) return null;
+userSchema.virtual("vendorFullBusinessAddress").get(function () {
+  if (this.role !== "vendor" || !this.vendorProfile.businessAddress)
+    return null;
   return `${this.vendorProfile.businessAddress.street}, ${this.vendorProfile.businessAddress.city}, ${this.vendorProfile.businessAddress.state}, ${this.vendorProfile.businessAddress.country} ${this.vendorProfile.businessAddress.zipCode}`;
 });
 
-// Virtual for checking if vendor is halal certified
-userSchema.virtual('isHalalCertified').get(function() {
-  if (this.role !== 'vendor') return false;
-  return this.vendorProfile.halalCertification.status === 'certified' && this.vendorProfile.halalCertification.verifiedByAdmin;
-});
-
 // Virtual for user display name
-userSchema.virtual('displayName').get(function() {
-  if (this.role === 'customer') {
+userSchema.virtual("displayName").get(function () {
+  if (this.role === "customer") {
     return this.customerProfile.fullName;
-  } else if (this.role === 'vendor') {
+  } else if (this.role === "vendor") {
     return this.vendorProfile.businessName;
   }
   return this.email;
 });
 
 // Use a toJSON transform to customize the output of the user object
-userSchema.set('toJSON', {
+userSchema.set("toJSON", {
   virtuals: true, // ensure virtuals like 'id' are included
   transform: (doc, ret) => {
     // 'ret' is the plain object that will be sent as JSON
 
     // Based on the user's role, remove the profile that is not relevant
-    if (ret.role === 'customer') {
+    if (ret.role === "customer") {
       delete ret.vendorProfile;
-    } else if (ret.role === 'vendor') {
+    } else if (ret.role === "vendor") {
       delete ret.customerProfile;
     }
 
@@ -957,6 +713,6 @@ userSchema.set('toJSON', {
   },
 });
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model("User", userSchema);
 
-module.exports = User; 
+module.exports = User;

@@ -95,12 +95,6 @@ const eventSchema = new mongoose.Schema({
     zipCode: { type: String, required: true, trim: true },
     country: { type: String, default: 'United States', trim: true }
   },
-  status: {
-    type: String,
-    enum: ['draft', 'published', 'archived', 'cancelled'],
-    default: 'draft',
-    index: true
-  },
   reviews: [reviewSchema],
   averageRating: {
     type: Number,
