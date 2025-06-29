@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const findZone = require('zipcode-to-timezone');
 
 const userSchema = new mongoose.Schema({
   // Common fields for all user types
@@ -145,6 +146,10 @@ const userSchema = new mongoose.Schema({
       quantity: { type: Number, default: 1 },
       addedAt: { type: Date, default: Date.now }
     }],
+    profileCompleted: {
+      type: Boolean,
+      default: false
+    },
     preferences: {
       eventTypes: {
         type: [String],
@@ -235,9 +240,8 @@ const userSchema = new mongoose.Schema({
     
     timezone: {
       type: String,
-      required: function() { return this.role === 'vendor' && this.authProvider === 'email'; },
-      enum: ['America/New_York', 'Europe/London', 'America/Los_Angeles', 'America/Chicago', 'America/Denver', 'America/Phoenix'],
-      default: 'America/New_York'
+      enum: ['America/New_York', 'Europe/London', 'America/Los_Angeles', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu'],
+      default: null
     },
     
     businessRegistration: {
@@ -794,11 +798,9 @@ const userSchema = new mongoose.Schema({
       }
     },
     
-    profileCompleteness: {
-      type: Number,
-      default: 0,
-      min: [0, 'Profile completeness cannot be negative'],
-      max: [100, 'Profile completeness cannot exceed 100']
+    profileCompleted: {
+      type: Boolean,
+      default: false
     }
   }
 }, {
@@ -824,6 +826,45 @@ userSchema.index({ createdAt: -1 });
 userSchema.index({ 'socialLogin.googleId': 1 }, { sparse: true });
 userSchema.index({ 'socialLogin.facebookId': 1 }, { sparse: true });
 userSchema.index({ 'vendorProfile.geo': '2dsphere' });
+
+// Pre-save middleware to handle automatic profile completion logic
+userSchema.pre('save', function(next) {
+  // --- Customer Profile Completion ---
+  if (this.role === 'customer' && this.customerProfile) {
+    const { fullName, gender, location } = this.customerProfile;
+    if (fullName && gender && location && location.city && location.state && location.country && location.zipCode) {
+      this.customerProfile.profileCompleted = true;
+    } else {
+      this.customerProfile.profileCompleted = false;
+    }
+  }
+
+  // --- Vendor Profile Completion & Timezone ---
+  if (this.role === 'vendor' && this.vendorProfile) {
+    // 1. Automatically set timezone if zip code is present
+    if (this.vendorProfile.businessAddress && this.vendorProfile.businessAddress.zipCode) {
+      try {
+        const zone = findZone.lookup(this.vendorProfile.businessAddress.zipCode);
+        if (zone) {
+          this.vendorProfile.timezone = zone;
+        }
+      } catch (e) {
+        // Ignore errors if zipcode is invalid, timezone will remain null
+        console.warn(`Could not find timezone for zip: ${this.vendorProfile.businessAddress.zipCode}`);
+      }
+    }
+
+    // 2. Check for profile completion
+    const { businessName, ownerName, businessAddress, timezone } = this.vendorProfile;
+    if (businessName && ownerName && timezone && businessAddress && businessAddress.street && businessAddress.city && businessAddress.state && businessAddress.country && businessAddress.zipCode) {
+      this.vendorProfile.profileCompleted = true;
+    } else {
+      this.vendorProfile.profileCompleted = false;
+    }
+  }
+
+  next();
+});
 
 // Pre-save middleware to clean profiles based on role
 userSchema.pre('save', function(next) {
@@ -866,45 +907,6 @@ userSchema.methods.createPasswordResetToken = function() {
   this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
   
   return resetToken;
-};
-
-// Instance method for vendor profile completeness calculation
-userSchema.methods.calculateVendorProfileCompleteness = function() {
-  if (this.role !== 'vendor') return 0;
-  
-  let score = 0;
-  const totalFields = 20;
-  
-  // Basic info (5 points each)
-  if (this.vendorProfile.businessName) score += 5;
-  if (this.vendorProfile.ownerName) score += 5;
-  if (this.email) score += 5;
-  if (this.phoneNumber) score += 5;
-  if (this.vendorProfile.businessAddress.street && this.vendorProfile.businessAddress.city) score += 5;
-  
-  // Service info (5 points each)
-  if (this.vendorProfile.primaryServiceCategory) score += 5;
-  if (this.vendorProfile.serviceDescription) score += 5;
-  if (this.vendorProfile.experienceYears >= 0) score += 5;
-  if (this.vendorProfile.serviceAreas.length > 0) score += 5;
-  if (this.vendorProfile.pricing.startingPrice > 0) score += 5;
-  
-  // Portfolio (5 points each)
-  if (this.vendorProfile.portfolio.images.length > 0) score += 5;
-  if (this.vendorProfile.portfolio.description) score += 5;
-  
-  // Additional features (5 points each)
-  if (this.vendorProfile.halalCertification.hasHalalCert) score += 5;
-  if (this.vendorProfile.socialLinks.website) score += 5;
-  if (this.vendorProfile.availability.workingDays.length > 0) score += 5;
-  if (this.vendorProfile.bookingRules.cancellationPolicy) score += 5;
-  if (this.vendorProfile.team.length > 0) score += 5;
-  if (this.vendorProfile.tags.length > 0) score += 5;
-  if (this.emailVerified) score += 5;
-  if (this.phoneVerified) score += 5;
-  
-  this.vendorProfile.profileCompleteness = Math.round(score);
-  return this.vendorProfile.profileCompleteness;
 };
 
 // Virtual for customer full location
