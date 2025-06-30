@@ -5,11 +5,13 @@ const router = express.Router();
 const authRoutes = require('./authRoutes');
 const eventRoutes = require('./eventRoutes');
 const cartRoutes = require('./cartRoutes');
+const searchRoutes = require('./searchRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);
 router.use('/cart', cartRoutes);
+router.use('/search', searchRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {

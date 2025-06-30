@@ -120,6 +120,12 @@ const eventSchema = new mongoose.Schema({
 // Compound index to ensure a vendor cannot create two events with the same name and type.
 eventSchema.index({ vendor: 1, name: 1, eventType: 1 }, { unique: true });
 
+// Text index for searching across multiple fields
+eventSchema.index(
+  { name: 'text', "location.city": 'text', "location.state": 'text', "location.zipCode": 'text', tags: 'text' }, 
+  { name: 'EventTextIndex', weights: { name: 10, tags: 5, 'location.city': 2, 'location.state': 2 } }
+);
+
 // Mongoose Middleware to create a slug from the name before saving
 eventSchema.pre('save', function(next) {
   if (this.isModified('name')) {

@@ -576,6 +576,9 @@ userSchema.index({ createdAt: -1 });
 userSchema.index({ "socialLogin.googleId": 1 }, { sparse: true });
 userSchema.index({ "socialLogin.facebookId": 1 }, { sparse: true });
 userSchema.index({ "vendorProfile.geo": "2dsphere" });
+userSchema.index({ "vendorProfile.businessName": 1 });
+userSchema.index({ "vendorProfile.primaryServiceCategory": 1 });
+userSchema.index({ "vendorProfile.serviceCategories": 1 });
 
 // Pre-save middleware to handle automatic profile completion logic
 userSchema.pre("save", function (next) {
