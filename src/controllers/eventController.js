@@ -11,50 +11,64 @@ const catchAsync = fn => {
 // @desc    Create a new event
 // @route   POST /api/events
 // @access  Private (Vendors only)
-exports.createEvent = catchAsync(async (req, res, next) => {
-  // The vendor's ID is attached to the request by the 'protect' middleware
-  const vendorId = req.user.id;
+// Using a custom try-catch block here instead of catchAsync to handle specific MongoDB errors
+exports.createEvent = async (req, res, next) => {
+  try {
+    const vendorId = req.user.id;
+    const { name, eventType } = req.body;
 
-  // 1. Check if files were uploaded
-  if (!req.files || req.files.length === 0) {
-    return res.status(400).json({
-      status: 'fail',
-      message: 'You must upload at least one image for the event.'
-    });
-  }
-
-  // 2. Process and upload images, get back the S3 URLs
-  const imageUrls = await processAndUploadImages(req.files, vendorId);
-
-  // 3. Parse stringified JSON fields from form-data
-  const eventData = { ...req.body };
-  if (eventData.packages) {
-    eventData.packages = JSON.parse(eventData.packages);
-  }
-  if (eventData.location) {
-    eventData.location = JSON.parse(eventData.location);
-  }
-  if (eventData.services) {
-    eventData.services = JSON.parse(eventData.services);
-  }
-  if (eventData.tags) {
-    eventData.tags = JSON.parse(eventData.tags);
-  }
-
-  // 4. Create the event
-  const newEvent = await Event.create({
-    ...eventData,
-    imageUrls,
-    vendor: vendorId // Ensure the event is linked to the logged-in vendor
-  });
-
-  res.status(201).json({
-    status: 'success',
-    data: {
-      event: newEvent
+    // 1. Application-level check for better UX
+    const existingEvent = await Event.findOne({ vendor: vendorId, name, eventType });
+    if (existingEvent) {
+      return res.status(409).json({ // 409 Conflict
+        status: 'fail',
+        message: 'You already have an event with this name and event type. Please choose a different name or type.'
+      });
     }
-  });
-});
+
+    // 2. Check if files were uploaded
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'You must upload at least one image for the event.'
+      });
+    }
+
+    // 3. Process and upload images, get back the S3 URLs
+    const imageUrls = await processAndUploadImages(req.files, vendorId);
+
+    // 4. Parse stringified JSON fields from form-data
+    const eventData = { ...req.body };
+    if (eventData.packages) eventData.packages = JSON.parse(eventData.packages);
+    if (eventData.location) eventData.location = JSON.parse(eventData.location);
+    if (eventData.services) eventData.services = JSON.parse(eventData.services);
+    if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
+
+    // 5. Create the event
+    const newEvent = await Event.create({
+      ...eventData,
+      imageUrls,
+      vendor: vendorId
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        event: newEvent
+      }
+    });
+  } catch (error) {
+    // 6. DB-level check for race conditions
+    if (error.code === 11000) {
+      return res.status(409).json({
+        status: 'fail',
+        message: 'An event with this name and type already exists. Please choose a different name or type.'
+      });
+    }
+    // Pass other errors to the global handler
+    next(error);
+  }
+};
 
 // @desc    Get a single event
 // @route   GET /api/events/:id
@@ -254,14 +268,9 @@ exports.getVendorEvents = catchAsync(async (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 10;
   const skip = (page - 1) * limit;
 
-  // Get filter parameters
-  const status = req.query.status; // 'active', 'draft', 'archived'
-  
   // Build query
   const query = { vendor: req.user.id }; // Only get events for the logged-in vendor
-  if (status) {
-    query.status = status;
-  }
+
 
   // Execute query with pagination
   const events = await Event.find(query)

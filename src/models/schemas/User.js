@@ -157,10 +157,27 @@ const userSchema = new mongoose.Schema(
         {
           event: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "Event",
+            ref: 'Event',
             required: true,
           },
-          quantity: { type: Number, default: 1 },
+          package: {
+            type: mongoose.Schema.Types.ObjectId,
+            required: true
+          },
+          eventDate: {
+            type: Date,
+            required: true
+          },
+          attendees: {
+            type: Number,
+            required: true,
+            min: [1, 'Must have at least one attendee.'],
+          },
+          totalPrice: {
+            type: Number,
+            required: true,
+            min: [0, 'Total price cannot be negative.']
+          },
           addedAt: { type: Date, default: Date.now },
         },
       ],
@@ -716,3 +733,4 @@ userSchema.set("toJSON", {
 const User = mongoose.model("User", userSchema);
 
 module.exports = User;
+

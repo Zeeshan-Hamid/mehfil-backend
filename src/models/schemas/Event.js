@@ -117,6 +117,9 @@ const eventSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Compound index to ensure a vendor cannot create two events with the same name and type.
+eventSchema.index({ vendor: 1, name: 1, eventType: 1 }, { unique: true });
+
 // Mongoose Middleware to create a slug from the name before saving
 eventSchema.pre('save', function(next) {
   if (this.isModified('name')) {

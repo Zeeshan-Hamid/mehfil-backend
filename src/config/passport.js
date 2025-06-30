@@ -74,6 +74,7 @@ module.exports = function(passport) {
                 culturalPreferences: []
               },
               preferredVendors: [],
+              customerCart: [],
               profileCompleted: false // Initialize as false for new users
             };
           }
