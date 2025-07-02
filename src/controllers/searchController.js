@@ -6,8 +6,10 @@ const Event = require('../models/Event');
 // @access  Public
 const searchVendors = async (req, res) => {
     try {
-        const { q } = req.query;
-
+        const { q, page = 1, limit = 10 } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        
         if (!q) {
             return res.status(400).json({
                 success: false,
@@ -16,18 +18,32 @@ const searchVendors = async (req, res) => {
         }
 
         // Using regex for a case-insensitive partial match on businessName
-        // An index on vendorProfile.businessName will make this efficient
+        // This will match partial words as well
         const vendors = await User.find({
             role: 'vendor',
             'vendorProfile.businessName': { $regex: q, $options: 'i' }
-        }).select('vendorProfile.businessName vendorProfile.ownerName vendorProfile.businessAddress vendorProfile.rating.average vendorProfile.rating.totalReviews'); // Select fields for a lean response
+        })
+        .select('vendorProfile.businessName vendorProfile.ownerName vendorProfile.businessAddress vendorProfile.rating vendorProfile.primaryServiceCategory')
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum);
+
+        // Get total count for pagination info
+        const totalCount = await User.countDocuments({
+            role: 'vendor',
+            'vendorProfile.businessName': { $regex: q, $options: 'i' }
+        });
 
         res.status(200).json({
             success: true,
-            message: `Found ${vendors.length} vendors matching your search.`,
+            message: `Found ${totalCount} vendors matching your search.`,
             data: {
-                count: vendors.length,
-                vendors
+                vendors,
+                pagination: {
+                    total: totalCount,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(totalCount / limitNum)
+                }
             }
         });
 
@@ -45,7 +61,9 @@ const searchVendors = async (req, res) => {
 // @access  Public
 const searchListings = async (req, res) => {
     try {
-        const { q } = req.query;
+        const { q, page = 1, limit = 12 } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
 
         if (!q) {
             return res.status(400).json({
@@ -54,26 +72,85 @@ const searchListings = async (req, res) => {
             });
         }
         
-        // Using MongoDB's text search capabilities.
-        // A text index must be created on the Event schema for this to work.
-        // The index will include name, location fields, and tags.
-        // Results are automatically scored and sorted by relevance.
-        const listings = await Event.find(
+        // Instead of combining text search with regex in an $or, we'll:
+        // 1. Try text search first (which is more efficient)
+        // 2. If not enough results, then try regex search
+        
+        // Create a regex pattern for the search term
+        const searchRegex = new RegExp(q, 'i');
+        
+        // First attempt: Use text search which is fast and uses the text index
+        let listings = await Event.find(
             { $text: { $search: q } },
-            { score: { $meta: "textScore" } }
+            { score: { $meta: 'textScore' } }
         )
-        .sort({ score: { $meta: "textScore" } })
+        .select('name eventType description imageUrls location averageRating totalReviews tags')
+        .sort({ score: { $meta: 'textScore' }, averageRating: -1, createdAt: -1 })
         .populate({
             path: 'vendor',
-            select: 'vendorProfile.businessName vendorProfile.ownerName' // Populate with lean vendor info
-        });
+            select: 'vendorProfile.businessName vendorProfile.rating'
+        })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum);
+        
+        // Get total count for text search
+        let totalCount = await Event.countDocuments({ $text: { $search: q } });
+        
+        // If text search didn't return enough results, try regex search
+        // This handles partial word matches better
+        if (listings.length < limitNum) {
+            // Calculate how many more items we need
+            const remainingItems = limitNum - listings.length;
+            
+            // Use regex search on individual fields (avoiding the $or with $text issue)
+            const regexListings = await Event.find({
+                $or: [
+                    { name: searchRegex },
+                    { 'location.city': searchRegex },
+                    { 'location.state': searchRegex },
+                    { 'location.zipCode': searchRegex },
+                    { tags: searchRegex }
+                ],
+                // Exclude items already found by text search
+                _id: { $nin: listings.map(l => l._id) }
+            })
+            .select('name eventType description imageUrls location averageRating totalReviews tags')
+            .sort({ averageRating: -1, createdAt: -1 })
+            .populate({
+                path: 'vendor',
+                select: 'vendorProfile.businessName vendorProfile.rating'
+            })
+            .limit(remainingItems);
+            
+            // Add regex search results to the listings array
+            listings = [...listings, ...regexListings];
+            
+            // Update total count to include regex matches
+            const regexCount = await Event.countDocuments({
+                $or: [
+                    { name: searchRegex },
+                    { 'location.city': searchRegex },
+                    { 'location.state': searchRegex },
+                    { 'location.zipCode': searchRegex },
+                    { tags: searchRegex }
+                ],
+                _id: { $nin: listings.map(l => l._id) }
+            });
+            
+            totalCount += regexCount;
+        }
 
         res.status(200).json({
             success: true,
-            message: `Found ${listings.length} listings matching your search.`,
+            message: `Found ${totalCount} listings matching your search.`,
             data: {
-                count: listings.length,
-                listings
+                listings,
+                pagination: {
+                    total: totalCount,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(totalCount / limitNum)
+                }
             }
         });
 
@@ -81,11 +158,11 @@ const searchListings = async (req, res) => {
         console.error('Listing search error:', error);
         res.status(500).json({
             success: false,
-            message: 'Internal server error during listing search.'
+            message: 'Internal server error during listing search.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
-
 
 module.exports = {
     searchVendors,

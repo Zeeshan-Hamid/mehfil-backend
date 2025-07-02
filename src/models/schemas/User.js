@@ -227,6 +227,60 @@ const userSchema = new mongoose.Schema(
           ref: "User",
         },
       ],
+      favorites: [
+        {
+          event: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Event',
+            required: true
+          },
+          addedAt: {
+            type: Date,
+            default: Date.now
+          }
+        }
+      ],
+      todoList: [
+        {
+          task: {
+            type: String,
+            required: true,
+            trim: true,
+            maxlength: [200, 'Task description cannot exceed 200 characters']
+          },
+          startDate: {
+            type: Date,
+            default: Date.now
+          },
+          endDate: {
+            type: Date,
+            required: true
+          },
+          status: {
+            type: String,
+            enum: ['pending', 'completed'],
+            default: 'pending'
+          },
+          priority: {
+            type: String,
+            enum: ['low', 'medium', 'high'],
+            default: 'medium'
+          },
+          notes: {
+            type: String,
+            trim: true,
+            maxlength: [500, 'Notes cannot exceed 500 characters']
+          },
+          createdAt: {
+            type: Date,
+            default: Date.now
+          },
+          updatedAt: {
+            type: Date,
+            default: Date.now
+          }
+        }
+      ],
     },
 
     // VENDOR-SPECIFIC FIELDS (only populated when role = 'vendor')
@@ -564,8 +618,6 @@ userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ "customerProfile.location.city": 1 });
 userSchema.index({ "vendorProfile.businessAddress.city": 1 });
-userSchema.index({ "vendorProfile.primaryServiceCategory": 1 });
-userSchema.index({ "vendorProfile.serviceCategories": 1 });
 userSchema.index({ "vendorProfile.approvalStatus": 1 });
 userSchema.index({ "vendorProfile.rating.average": -1 });
 userSchema.index({ "vendorProfile.isFeatured": -1, createdAt: -1 });
@@ -575,7 +627,6 @@ userSchema.index({ "customerProfile.preferences.eventTypes": 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ "socialLogin.googleId": 1 }, { sparse: true });
 userSchema.index({ "socialLogin.facebookId": 1 }, { sparse: true });
-userSchema.index({ "vendorProfile.geo": "2dsphere" });
 userSchema.index({ "vendorProfile.businessName": 1 });
 userSchema.index({ "vendorProfile.primaryServiceCategory": 1 });
 userSchema.index({ "vendorProfile.serviceCategories": 1 });

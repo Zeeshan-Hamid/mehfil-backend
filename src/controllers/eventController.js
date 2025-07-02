@@ -184,41 +184,155 @@ exports.deleteEvent = catchAsync(async (req, res, next) => {
   });
 });
 
-// @desc    Get all active events from all vendors (for customer browsing)
+// @desc    Get all active events from all vendors (for customer browsing/marketplace)
 // @route   GET /api/events
 // @access  Public
 exports.getAllEvents = catchAsync(async (req, res, next) => {
-  const page = parseInt(req.query.page, 10) || 1;
-  const limit = parseInt(req.query.limit, 10) || 10;
-  const skip = (page - 1) * limit;
+  try {
+    // Helper function to escape special regex characters
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+    }
 
-  // The query object is now empty, so it will find all events.
-  const query = {};
+    // 1. Extract pagination parameters
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 12; // Default 12 for grid layout
+    const skip = (page - 1) * limit;
 
-  const events = await Event.find(query)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .populate({
-      path: 'vendor',
-      select: 'vendorProfile.businessName vendorProfile.profileImage'
-    });
+    // 2. Build query with filters
+    const queryObj = {};
 
-  const totalEvents = await Event.countDocuments(query);
+    // Filter by event type
+    if (req.query.eventType) {
+      queryObj.eventType = req.query.eventType;
+    }
 
-  res.status(200).json({
-    status: 'success',
-    data: {
-      events,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(totalEvents / limit),
-        totalEvents,
-        hasNextPage: skip + events.length < totalEvents,
-        hasPrevPage: page > 1
+    // Filter by location (city, state, or zipCode)
+    if (req.query.city) {
+      // Create a case-insensitive query that allows partial matches for city
+      queryObj['location.city'] = { $regex: escapeRegExp(req.query.city), $options: 'i' };
+    }
+
+    if (req.query.state) {
+      // Create a case-insensitive query that allows partial matches for state
+      queryObj['location.state'] = { $regex: escapeRegExp(req.query.state), $options: 'i' };
+    }
+
+    if (req.query.zipCode) {
+      queryObj['location.zipCode'] = req.query.zipCode;
+    }
+
+    // Filter by event rating (using the averageRating field)
+    if (req.query.rating) {
+      const rating = parseFloat(req.query.rating);
+      if (!isNaN(rating) && rating >= 0 && rating <= 5) {
+        // Find events with the specified average rating (exact match with small tolerance)
+        // Convert to number to ensure proper comparison in MongoDB
+        const minRating = Math.max(0, rating - 0.2);
+        const maxRating = Math.min(5, rating + 0.2);
+        queryObj.averageRating = { $gte: minRating, $lte: maxRating };
+        console.log(`Filtering by rating: ${rating}, range: ${minRating} to ${maxRating}`);
+      } else {
+        console.log(`Invalid rating value: ${req.query.rating}`);
       }
     }
-  });
+
+    // Filter by price range (if events have a starting price)
+    if (req.query.minPrice) {
+      const minPrice = parseFloat(req.query.minPrice);
+      if (!isNaN(minPrice) && minPrice >= 0) {
+        queryObj['packages.price'] = { $gte: minPrice };
+      }
+    }
+
+    if (req.query.maxPrice) {
+      const maxPrice = parseFloat(req.query.maxPrice);
+      if (!isNaN(maxPrice) && maxPrice >= 0) {
+        if (!queryObj['packages.price']) {
+          queryObj['packages.price'] = {};
+        }
+        queryObj['packages.price'].$lte = maxPrice;
+      }
+    }
+
+    // Filter by tags
+    if (req.query.tags) {
+      const tags = req.query.tags.split(',').map(tag => tag.trim());
+      queryObj.tags = { $in: tags };
+    }
+
+    // 3. Determine sort order
+    let sortOption = { createdAt: -1 }; // Default: newest first
+    
+    if (req.query.sort) {
+      switch (req.query.sort) {
+        case 'price-asc':
+          sortOption = { 'packages.price': 1 };
+          break;
+        case 'price-desc':
+          sortOption = { 'packages.price': -1 };
+          break;
+        case 'rating-desc':
+          sortOption = { averageRating: -1 };
+          break;
+        case 'reviews-desc':
+          sortOption = { totalReviews: -1 };
+          break;
+        case 'name-asc':
+          sortOption = { name: 1 };
+          break;
+        default:
+          sortOption = { createdAt: -1 }; // Default to newest
+      }
+    }
+
+    // Log the final query for debugging
+    console.log('Final query:', JSON.stringify(queryObj));
+    
+    // 4. Execute query with pagination
+    const events = await Event.find(queryObj)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(limit)
+      .select('name eventType description imageUrls location averageRating totalReviews tags createdAt packages')
+      .populate({
+        path: 'vendor',
+        select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'
+      });
+    
+    // Log the number of events found
+    console.log(`Found ${events.length} events matching the query`);
+    
+    // 5. Get total count for pagination
+    const totalEvents = await Event.countDocuments(queryObj);
+
+    // 6. Send response
+    res.status(200).json({
+      status: 'success',
+      results: events.length,
+      data: {
+        events,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalEvents / limit),
+          totalEvents,
+          limit,
+          hasNextPage: skip + events.length < totalEvents,
+          hasPrevPage: page > 1
+        },
+        filters: {
+          applied: Object.keys(queryObj).length > 0,
+          ...queryObj
+        }
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: 'Error fetching marketplace events',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
 // @desc    Get all active events for a specific vendor (for public vendor profile)

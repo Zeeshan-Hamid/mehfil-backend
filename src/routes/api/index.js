@@ -6,12 +6,18 @@ const authRoutes = require('./authRoutes');
 const eventRoutes = require('./eventRoutes');
 const cartRoutes = require('./cartRoutes');
 const searchRoutes = require('./searchRoutes');
+const newsletterRoutes = require('./newsletterRoutes');
+const favoriteRoutes = require('./favoriteRoutes');
+const todoRoutes = require('./todoRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);
 router.use('/cart', cartRoutes);
 router.use('/search', searchRoutes);
+router.use('/newsletter', newsletterRoutes);
+router.use('/favorites', favoriteRoutes);
+router.use('/todos', todoRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {

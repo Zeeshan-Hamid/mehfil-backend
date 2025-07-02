@@ -10,6 +10,11 @@ const {
   getAllEvents,
   getEventsByVendorPublic
 } = require('../../controllers/eventController');
+const {
+  addReview,
+  getEventReviews,
+  deleteReview
+} = require('../../controllers/reviewController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 
 
@@ -17,11 +22,26 @@ const { uploadInMemory } = require('../../services/fileUploadService');
 // Get all active events with pagination for customer browsing
 router.get('/', getAllEvents);
 
+// Dedicated marketplace route with advanced filtering
+router.get('/marketplace', getAllEvents);
+
 // Get all active events for a specific vendor (for public vendor profile pages)
 router.get('/vendor/:vendorId', getEventsByVendorPublic);
 
 // Get a single event by its ID
 router.get('/:id', getEvent);
+
+// Get all reviews for an event
+router.get('/:eventId/reviews', getEventReviews);
+
+
+// --- PROTECTED ROUTES ---
+
+// Add a review to an event (customers only)
+router.post('/:eventId/reviews', protect, restrictTo('customer'), addReview);
+
+// Delete a review (review owner or admin only)
+router.delete('/:eventId/reviews/:reviewId', protect, deleteReview);
 
 
 // --- PROTECTED VENDOR ROUTES ---
