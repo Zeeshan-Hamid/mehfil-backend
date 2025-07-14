@@ -181,6 +181,88 @@ const userSchema = new mongoose.Schema(
           addedAt: { type: Date, default: Date.now },
         },
       ],
+      bookedEvents: [
+        {
+          event: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Event',
+            required: true,
+          },
+          package: {
+            type: mongoose.Schema.Types.ObjectId,
+            required: true,
+          },
+          vendor: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true,
+          },
+          eventDate: {
+            type: Date,
+            required: true,
+          },
+          attendees: {
+            type: Number,
+            required: true,
+            min: [1, 'Must have at least one attendee.'],
+          },
+          totalPrice: {
+            type: Number,
+            required: true,
+            min: [0, 'Total price cannot be negative.'],
+          },
+          bookingDate: {
+            type: Date,
+            default: Date.now,
+          },
+          status: {
+            type: String,
+            enum: ['confirmed', 'pending', 'cancelled'],
+            default: 'confirmed',
+          },
+          todoList: [
+            {
+              task: {
+                type: String,
+                required: true,
+                trim: true,
+                maxlength: [200, 'Task description cannot exceed 200 characters']
+              },
+              startDate: {
+                type: Date,
+                default: Date.now
+              },
+              endDate: {
+                type: Date,
+                required: true
+              },
+              status: {
+                type: String,
+                enum: ['pending', 'completed'],
+                default: 'pending'
+              },
+              priority: {
+                type: String,
+                enum: ['low', 'medium', 'high'],
+                default: 'medium'
+              },
+              notes: {
+                type: String,
+                trim: true,
+                maxlength: [500, 'Notes cannot exceed 500 characters']
+              },
+              createdAt: {
+                type: Date,
+                default: Date.now
+              },
+              updatedAt: {
+                type: Date,
+                default: Date.now
+              }
+            }
+          ],
+        },
+      ],
       profileCompleted: {
         type: Boolean,
         default: false,
@@ -235,47 +317,6 @@ const userSchema = new mongoose.Schema(
             required: true
           },
           addedAt: {
-            type: Date,
-            default: Date.now
-          }
-        }
-      ],
-      todoList: [
-        {
-          task: {
-            type: String,
-            required: true,
-            trim: true,
-            maxlength: [200, 'Task description cannot exceed 200 characters']
-          },
-          startDate: {
-            type: Date,
-            default: Date.now
-          },
-          endDate: {
-            type: Date,
-            required: true
-          },
-          status: {
-            type: String,
-            enum: ['pending', 'completed'],
-            default: 'pending'
-          },
-          priority: {
-            type: String,
-            enum: ['low', 'medium', 'high'],
-            default: 'medium'
-          },
-          notes: {
-            type: String,
-            trim: true,
-            maxlength: [500, 'Notes cannot exceed 500 characters']
-          },
-          createdAt: {
-            type: Date,
-            default: Date.now
-          },
-          updatedAt: {
             type: Date,
             default: Date.now
           }

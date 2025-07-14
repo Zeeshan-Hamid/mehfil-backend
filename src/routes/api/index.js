@@ -9,6 +9,7 @@ const searchRoutes = require('./searchRoutes');
 const newsletterRoutes = require('./newsletterRoutes');
 const favoriteRoutes = require('./favoriteRoutes');
 const todoRoutes = require('./todoRoutes');
+const bookingRoutes = require('./bookingRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -18,6 +19,7 @@ router.use('/search', searchRoutes);
 router.use('/newsletter', newsletterRoutes);
 router.use('/favorites', favoriteRoutes);
 router.use('/todos', todoRoutes);
+router.use('/bookings', bookingRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {

@@ -8,8 +8,8 @@ const catchAsync = fn => {
   };
 };
 
-// @desc    Get all todo list tasks for the current user
-// @route   GET /api/todos
+// @desc    Get all todo list tasks for a specific booked event
+// @route   GET /api/todos/:bookingId
 // @access  Private (Customer only)
 exports.getAllTodos = catchAsync(async (req, res) => {
   // Check if user is a customer
@@ -21,9 +21,17 @@ exports.getAllTodos = catchAsync(async (req, res) => {
   }
 
   const userId = req.user.id;
+  const { bookingId } = req.params;
 
-  // Find the user and get their todo list
-  const user = await User.findById(userId).select('customerProfile.todoList');
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'Invalid booking ID'
+    });
+  }
+
+  // Find the user and get their booked events
+  const user = await User.findById(userId).select('customerProfile.bookedEvents');
 
   if (!user || !user.customerProfile) {
     return res.status(404).json({
@@ -32,8 +40,18 @@ exports.getAllTodos = catchAsync(async (req, res) => {
     });
   }
 
+  // Find the specific booked event
+  const bookedEvent = user.customerProfile.bookedEvents.id(bookingId);
+
+  if (!bookedEvent) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Booked event not found'
+    });
+  }
+
   // Apply filters if provided
-  let todoList = user.customerProfile.todoList || [];
+  let todoList = bookedEvent.todoList || [];
 
   // Filter by status if specified
   if (req.query.status && ['pending', 'completed'].includes(req.query.status)) {
@@ -63,13 +81,14 @@ exports.getAllTodos = catchAsync(async (req, res) => {
     status: 'success',
     results: todoList.length,
     data: {
+      bookingId,
       todoList
     }
   });
 });
 
-// @desc    Get a specific todo task by ID
-// @route   GET /api/todos/:id
+// @desc    Get a specific todo task by ID for a booked event
+// @route   GET /api/todos/:bookingId/:todoId
 // @access  Private (Customer only)
 exports.getTodo = catchAsync(async (req, res) => {
   // Check if user is a customer
@@ -81,12 +100,12 @@ exports.getTodo = catchAsync(async (req, res) => {
   }
 
   const userId = req.user.id;
-  const todoId = req.params.id;
+  const { bookingId, todoId } = req.params;
 
-  if (!mongoose.Types.ObjectId.isValid(todoId)) {
+  if (!mongoose.Types.ObjectId.isValid(bookingId) || !mongoose.Types.ObjectId.isValid(todoId)) {
     return res.status(400).json({
       status: 'fail',
-      message: 'Invalid todo ID'
+      message: 'Invalid booking ID or todo ID'
     });
   }
 
@@ -100,8 +119,18 @@ exports.getTodo = catchAsync(async (req, res) => {
     });
   }
 
+  // Find the specific booked event
+  const bookedEvent = user.customerProfile.bookedEvents.id(bookingId);
+
+  if (!bookedEvent) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Booked event not found'
+    });
+  }
+
   // Find the specific todo task
-  const todo = user.customerProfile.todoList.id(todoId);
+  const todo = bookedEvent.todoList.id(todoId);
 
   if (!todo) {
     return res.status(404).json({
@@ -113,13 +142,14 @@ exports.getTodo = catchAsync(async (req, res) => {
   res.status(200).json({
     status: 'success',
     data: {
+      bookingId,
       todo
     }
   });
 });
 
-// @desc    Create a new todo task
-// @route   POST /api/todos
+// @desc    Create a new todo task for a booked event
+// @route   POST /api/todos/:bookingId
 // @access  Private (Customer only)
 exports.createTodo = catchAsync(async (req, res) => {
   // Check if user is a customer
@@ -131,7 +161,15 @@ exports.createTodo = catchAsync(async (req, res) => {
   }
 
   const userId = req.user.id;
+  const { bookingId } = req.params;
   const { task, startDate, endDate, priority, notes } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'Invalid booking ID'
+    });
+  }
 
   // Validate required fields
   if (!task || !endDate) {
@@ -153,7 +191,7 @@ exports.createTodo = catchAsync(async (req, res) => {
     updatedAt: Date.now()
   };
 
-  // Find the user and add the todo task
+  // Find the user
   const user = await User.findById(userId);
 
   if (!user || !user.customerProfile) {
@@ -163,28 +201,39 @@ exports.createTodo = catchAsync(async (req, res) => {
     });
   }
 
+  // Find the specific booked event
+  const bookedEvent = user.customerProfile.bookedEvents.id(bookingId);
+
+  if (!bookedEvent) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Booked event not found'
+    });
+  }
+
   // Initialize todoList array if it doesn't exist
-  if (!user.customerProfile.todoList) {
-    user.customerProfile.todoList = [];
+  if (!bookedEvent.todoList) {
+    bookedEvent.todoList = [];
   }
 
   // Add the new todo
-  user.customerProfile.todoList.push(newTodo);
+  bookedEvent.todoList.push(newTodo);
   await user.save();
 
   // Get the newly created todo with its generated ID
-  const createdTodo = user.customerProfile.todoList[user.customerProfile.todoList.length - 1];
+  const createdTodo = bookedEvent.todoList[bookedEvent.todoList.length - 1];
 
   res.status(201).json({
     status: 'success',
     data: {
+      bookingId,
       todo: createdTodo
     }
   });
 });
 
-// @desc    Update a todo task
-// @route   PATCH /api/todos/:id
+// @desc    Update a todo task for a booked event
+// @route   PATCH /api/todos/:bookingId/:todoId
 // @access  Private (Customer only)
 exports.updateTodo = catchAsync(async (req, res) => {
   // Check if user is a customer
@@ -196,13 +245,13 @@ exports.updateTodo = catchAsync(async (req, res) => {
   }
 
   const userId = req.user.id;
-  const todoId = req.params.id;
+  const { bookingId, todoId } = req.params;
   const updates = req.body;
 
-  if (!mongoose.Types.ObjectId.isValid(todoId)) {
+  if (!mongoose.Types.ObjectId.isValid(bookingId) || !mongoose.Types.ObjectId.isValid(todoId)) {
     return res.status(400).json({
       status: 'fail',
-      message: 'Invalid todo ID'
+      message: 'Invalid booking ID or todo ID'
     });
   }
 
@@ -216,12 +265,20 @@ exports.updateTodo = catchAsync(async (req, res) => {
     });
   }
 
-  // Find the todo task to update
-  const todoIndex = user.customerProfile.todoList.findIndex(
-    todo => todo._id.toString() === todoId
-  );
+  // Find the specific booked event
+  const bookedEvent = user.customerProfile.bookedEvents.id(bookingId);
 
-  if (todoIndex === -1) {
+  if (!bookedEvent) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Booked event not found'
+    });
+  }
+
+  // Find the todo task to update
+  const todo = bookedEvent.todoList.id(todoId);
+
+  if (!todo) {
     return res.status(404).json({
       status: 'fail',
       message: 'Todo task not found'
@@ -229,8 +286,6 @@ exports.updateTodo = catchAsync(async (req, res) => {
   }
 
   // Update the todo task with the provided fields
-  const todo = user.customerProfile.todoList[todoIndex];
-  
   if (updates.task) todo.task = updates.task;
   if (updates.startDate) todo.startDate = updates.startDate;
   if (updates.endDate) todo.endDate = updates.endDate;
@@ -251,13 +306,14 @@ exports.updateTodo = catchAsync(async (req, res) => {
   res.status(200).json({
     status: 'success',
     data: {
-      todo: user.customerProfile.todoList[todoIndex]
+      bookingId,
+      todo
     }
   });
 });
 
-// @desc    Delete a todo task
-// @route   DELETE /api/todos/:id
+// @desc    Delete a todo task for a booked event
+// @route   DELETE /api/todos/:bookingId/:todoId
 // @access  Private (Customer only)
 exports.deleteTodo = catchAsync(async (req, res) => {
   // Check if user is a customer
@@ -269,12 +325,12 @@ exports.deleteTodo = catchAsync(async (req, res) => {
   }
 
   const userId = req.user.id;
-  const todoId = req.params.id;
+  const { bookingId, todoId } = req.params;
 
-  if (!mongoose.Types.ObjectId.isValid(todoId)) {
+  if (!mongoose.Types.ObjectId.isValid(bookingId) || !mongoose.Types.ObjectId.isValid(todoId)) {
     return res.status(400).json({
       status: 'fail',
-      message: 'Invalid todo ID'
+      message: 'Invalid booking ID or todo ID'
     });
   }
 
@@ -288,10 +344,18 @@ exports.deleteTodo = catchAsync(async (req, res) => {
     });
   }
 
-  // Find the todo task index
-  const todoIndex = user.customerProfile.todoList.findIndex(
-    todo => todo._id.toString() === todoId
-  );
+  // Find the specific booked event
+  const bookedEvent = user.customerProfile.bookedEvents.id(bookingId);
+
+  if (!bookedEvent) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Booked event not found'
+    });
+  }
+
+  // Find and remove the todo task
+  const todoIndex = bookedEvent.todoList.findIndex(todo => todo._id.toString() === todoId);
 
   if (todoIndex === -1) {
     return res.status(404).json({
@@ -301,7 +365,7 @@ exports.deleteTodo = catchAsync(async (req, res) => {
   }
 
   // Remove the todo task
-  user.customerProfile.todoList.splice(todoIndex, 1);
+  bookedEvent.todoList.splice(todoIndex, 1);
   await user.save();
 
   res.status(200).json({

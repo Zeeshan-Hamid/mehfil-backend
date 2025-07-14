@@ -12,13 +12,13 @@ const {
 // All todo routes require authentication and are restricted to customers
 router.use(protect, restrictTo('customer'));
 
-// Get all todos and create a new todo
-router.route('/')
+// Routes for todos within a specific booked event
+router.route('/:bookingId')
   .get(getAllTodos)
   .post(createTodo);
 
-// Get, update, and delete a specific todo
-router.route('/:id')
+// Routes for specific todo within a specific booked event
+router.route('/:bookingId/:todoId')
   .get(getTodo)
   .patch(updateTodo)
   .delete(deleteTodo);
