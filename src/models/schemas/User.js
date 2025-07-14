@@ -164,6 +164,12 @@ const userSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             required: true
           },
+          packageType: {
+            type: String,
+            enum: ['regular', 'custom'],
+            required: true,
+            default: 'regular'
+          },
           eventDate: {
             type: Date,
             required: true
@@ -190,7 +196,13 @@ const userSchema = new mongoose.Schema(
           },
           package: {
             type: mongoose.Schema.Types.ObjectId,
+            required: true
+          },
+          packageType: {
+            type: String,
+            enum: ['regular', 'custom'],
             required: true,
+            default: 'regular'
           },
           vendor: {
             type: mongoose.Schema.Types.ObjectId,

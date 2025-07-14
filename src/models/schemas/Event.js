@@ -88,6 +88,53 @@ const eventSchema = new mongoose.Schema({
     required: true
   },
   packages: [packageSchema],
+  customPackages: [
+    {
+      name: {
+        type: String,
+        required: [true, 'Custom package name is required.'],
+        trim: true,
+        maxlength: [100, 'Custom package name cannot exceed 100 characters.']
+      },
+      price: {
+        type: Number,
+        required: [true, 'Custom package price is required.'],
+        min: [0, 'Custom package price cannot be negative.']
+      },
+      currency: {
+        type: String,
+        default: 'USD',
+        enum: ['USD', 'CAD', 'GBP', 'EUR']
+      },
+      includes: {
+        type: [String],
+        required: [true, 'Custom package inclusions are required.']
+      },
+      description: {
+        type: String,
+        trim: true,
+        maxlength: [500, 'Custom package description cannot exceed 500 characters.']
+      },
+      createdFor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: [true, 'Custom package must be created for a specific customer.']
+      },
+      createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: [true, 'Custom package must have a creator.']
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      },
+      isActive: {
+        type: Boolean,
+        default: true
+      }
+    }
+  ],
   location: {
     address: { type: String, trim: true },
     city: { type: String, required: true, trim: true },

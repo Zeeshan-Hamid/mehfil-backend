@@ -9,11 +9,15 @@ const catchAsync = fn => {
 };
 
 exports.bookEvent = catchAsync(async (req, res, next) => {
-    const { eventId, packageId, eventDate, attendees, totalPrice } = req.body;
+    const { eventId, packageId, packageType, eventDate, attendees, totalPrice } = req.body;
     const customerId = req.user.id;
 
-    if (!eventId || !packageId || !eventDate || !attendees || totalPrice === undefined) {
-        return res.status(400).json({ success: false, message: 'Please provide eventId, packageId, eventDate, attendees, and totalPrice.' });
+    if (!eventId || !packageId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
+        return res.status(400).json({ success: false, message: 'Please provide eventId, packageId, packageType, eventDate, attendees, and totalPrice.' });
+    }
+
+    if (!['regular', 'custom'].includes(packageType)) {
+        return res.status(400).json({ success: false, message: 'packageType must be either "regular" or "custom".' });
     }
 
     const event = await Event.findById(eventId);
@@ -21,9 +25,23 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
         return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
-    const eventPackage = event.packages.id(packageId);
-    if (!eventPackage) {
-        return res.status(404).json({ success: false, message: 'Package not found for this event.' });
+    let eventPackage;
+    
+    if (packageType === 'regular') {
+        eventPackage = event.packages.id(packageId);
+        if (!eventPackage) {
+            return res.status(404).json({ success: false, message: 'Package not found for this event.' });
+        }
+    } else {
+        // For custom packages, check if it exists and is created for this customer
+        eventPackage = event.customPackages.find(pkg => 
+            pkg._id.toString() === packageId && 
+            pkg.createdFor.toString() === customerId &&
+            pkg.isActive
+        );
+        if (!eventPackage) {
+            return res.status(404).json({ success: false, message: 'Custom package not found or not available for you.' });
+        }
     }
 
     const user = await User.findById(customerId);
@@ -31,6 +49,7 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
     const newBooking = {
         event: eventId,
         package: packageId,
+        packageType,
         vendor: event.vendor,
         eventDate,
         attendees,
@@ -40,7 +59,11 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
     user.customerProfile.bookedEvents.push(newBooking);
 
     // Remove the event from the cart if it exists there
-    const cartItemIndex = user.customerProfile.customerCart.findIndex(item => item.event.equals(eventId) && item.package.equals(packageId));
+    const cartItemIndex = user.customerProfile.customerCart.findIndex(item => 
+        item.event.equals(eventId) && 
+        item.package.equals(packageId) && 
+        item.packageType === packageType
+    );
     if (cartItemIndex > -1) {
         user.customerProfile.customerCart.splice(cartItemIndex, 1);
     }
@@ -61,7 +84,7 @@ exports.getBookedEvents = catchAsync(async (req, res, next) => {
 
     const user = await User.findById(customerId).populate({
         path: 'customerProfile.bookedEvents.event',
-        select: 'name imageUrls location packages vendor',
+        select: 'name imageUrls location packages customPackages vendor',
         populate: {
             path: 'vendor',
             select: 'vendorProfile.businessName'
@@ -81,7 +104,15 @@ exports.getBookedEvents = catchAsync(async (req, res, next) => {
                 error: 'The original event for this booking has been deleted.'
             };
         }
-        const eventPackage = booking.event.packages.id(booking.package);
+        
+        let eventPackage;
+        if (booking.packageType === 'regular') {
+            eventPackage = booking.event.packages.id(booking.package);
+        } else {
+            // For custom packages, find the specific custom package
+            eventPackage = booking.event.customPackages.find(pkg => pkg._id.toString() === booking.package.toString());
+        }
+        
         return {
             _id: booking._id,
             event: {
@@ -92,6 +123,7 @@ exports.getBookedEvents = catchAsync(async (req, res, next) => {
                 vendor: booking.event.vendor
             },
             package: eventPackage ? eventPackage.toObject() : { name: 'Package not found' },
+            packageType: booking.packageType,
             vendor: booking.vendor,
             eventDate: booking.eventDate,
             attendees: booking.attendees,

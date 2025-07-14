@@ -24,10 +24,19 @@ exports.getCart = async (req, res) => {
           _id: item._id,
           event: null, // Indicate that the event is no longer available
           package: null,
+          packageType: item.packageType,
           error: 'Event no longer exists.'
         };
       }
-      const eventPackage = item.event.packages.id(item.package);
+      
+      let eventPackage;
+      if (item.packageType === 'regular') {
+        eventPackage = item.event.packages.id(item.package);
+      } else {
+        // For custom packages, find the specific custom package
+        eventPackage = item.event.customPackages.find(pkg => pkg._id.toString() === item.package.toString());
+      }
+      
       return {
         _id: item._id,
         event: {
@@ -37,6 +46,7 @@ exports.getCart = async (req, res) => {
           location: item.event.location
         },
         package: eventPackage || { name: 'Package not found' },
+        packageType: item.packageType,
         eventDate: item.eventDate,
         attendees: item.attendees,
         totalPrice: item.totalPrice,
@@ -60,10 +70,14 @@ exports.getCart = async (req, res) => {
 // @route   POST /api/cart
 // @access  Private (Customers only)
 exports.addToCart = async (req, res) => {
-  const { eventId, packageId, eventDate, attendees, totalPrice } = req.body;
+  const { eventId, packageId, packageType, eventDate, attendees, totalPrice } = req.body;
 
-  if (!eventId || !packageId || !eventDate || !attendees || totalPrice === undefined) {
-    return res.status(400).json({ success: false, message: 'Please provide eventId, packageId, eventDate, attendees, and totalPrice.' });
+  if (!eventId || !packageId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
+    return res.status(400).json({ success: false, message: 'Please provide eventId, packageId, packageType, eventDate, attendees, and totalPrice.' });
+  }
+
+  if (!['regular', 'custom'].includes(packageType)) {
+    return res.status(400).json({ success: false, message: 'packageType must be either "regular" or "custom".' });
   }
 
   try {
@@ -74,14 +88,28 @@ exports.addToCart = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
-    const eventPackage = event.packages.id(packageId);
-    if (!eventPackage) {
-      return res.status(404).json({ success: false, message: 'Package not found for this event.' });
+    let eventPackage;
+    
+    if (packageType === 'regular') {
+      eventPackage = event.packages.id(packageId);
+      if (!eventPackage) {
+        return res.status(404).json({ success: false, message: 'Package not found for this event.' });
+      }
+    } else {
+      // For custom packages, check if it exists and is created for this customer
+      eventPackage = event.customPackages.find(pkg => 
+        pkg._id.toString() === packageId && 
+        pkg.createdFor.toString() === req.user.id &&
+        pkg.isActive
+      );
+      if (!eventPackage) {
+        return res.status(404).json({ success: false, message: 'Custom package not found or not available for you.' });
+      }
     }
     
     // Check if the same event and package is already in the cart
     const itemExists = user.customerProfile.customerCart.some(item => 
-      item.event.equals(eventId) && item.package.equals(packageId)
+      item.event.equals(eventId) && item.package.equals(packageId) && item.packageType === packageType
     );
 
     if (itemExists) {
@@ -91,6 +119,7 @@ exports.addToCart = async (req, res) => {
     user.customerProfile.customerCart.push({
       event: eventId,
       package: packageId,
+      packageType,
       eventDate,
       attendees,
       totalPrice

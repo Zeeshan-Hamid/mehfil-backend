@@ -10,6 +10,7 @@ const newsletterRoutes = require('./newsletterRoutes');
 const favoriteRoutes = require('./favoriteRoutes');
 const todoRoutes = require('./todoRoutes');
 const bookingRoutes = require('./bookingRoutes');
+const customPackageRoutes = require('./customPackageRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -20,6 +21,7 @@ router.use('/newsletter', newsletterRoutes);
 router.use('/favorites', favoriteRoutes);
 router.use('/todos', todoRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/custom-packages', customPackageRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {
