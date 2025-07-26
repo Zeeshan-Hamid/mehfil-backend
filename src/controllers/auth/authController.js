@@ -545,14 +545,24 @@ const verifyEmail = async (req, res) => {
       userResponse.profileCompleted = userResponse.vendorProfile.profileCompleted;
     }
 
-    res.status(200).json({
+    // Create a response object with verification success data
+    const responseData = {
       success: true,
       message: 'Email verified successfully. You are now logged in.',
       data: {
         user: userResponse,
         token: authToken
       }
-    });
+    };
+
+    // Encode the response data to be included in the URL
+    const encodedData = Buffer.from(JSON.stringify(responseData)).toString('base64');
+
+    // Instead of redirecting to the frontend with just the token, include the encoded data
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const redirectUrl = `${frontendUrl}/verify-email/success?data=${encodedData}`;
+    
+    return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Email verification error:', error);
     res.status(500).json({

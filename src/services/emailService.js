@@ -1,21 +1,24 @@
 const transporter = require('../config/email');
+const emailTemplate = require('./emailTemplate');
 
 class EmailService {
   static async sendPasswordResetEmail(email, resetToken, origin) {
-    const resetUrl = `${origin}/api/auth/reset-password/${resetToken}`;
-    
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+
+    const title = 'Password Reset Request';
+    const content = `
+      <p>You requested to reset your password. Please click the button below to proceed. This link will expire in 10 minutes.</p>
+    `;
+    const button = { text: 'Reset Password', url: resetUrl };
+
+    const html = emailTemplate(title, content, button);
+
     const message = {
-      from: process.env.EMAIL_FROM || 'noreply@mehfil.com',
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'Password Reset Request - Mehfil',
-      html: `
-        <h1>Password Reset Request</h1>
-        <p>You requested to reset your password. Please click the link below to reset your password:</p>
-        <a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px;">Reset Password</a>
-        <p>If you didn't request this, please ignore this email.</p>
-        <p>This link will expire in 10 minutes.</p>
-        <p>Best regards,<br>Mehfil Team</p>
-      `
+      html,
     };
 
     try {
@@ -28,16 +31,19 @@ class EmailService {
   }
 
   static async sendPasswordResetConfirmation(email) {
+    const title = 'Password Reset Successful';
+    const content = `
+      <p>Your password has been successfully reset. You can now use your new password to log in.</p>
+      <p>If you did not perform this action, please contact our support team immediately.</p>
+    `;
+
+    const html = emailTemplate(title, content);
+
     const message = {
-      from: process.env.EMAIL_FROM || 'noreply@mehfil.com',
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'Password Reset Successful - Mehfil',
-      html: `
-        <h1>Password Reset Successful</h1>
-        <p>Your password has been successfully reset.</p>
-        <p>If you did not perform this action, please contact our support team immediately.</p>
-        <p>Best regards,<br>Mehfil Team</p>
-      `
+      html,
     };
 
     try {
@@ -51,19 +57,20 @@ class EmailService {
 
   static async sendVerificationEmail(email, verificationToken, origin) {
     const verificationUrl = `${origin}/api/auth/verify-email/${verificationToken}`;
-    
+
+    const title = 'Welcome to Mehfil!';
+    const content = `
+      <p>Thank you for signing up! Please click the button below to verify your email address and complete your registration. This link will expire in 24 hours.</p>
+    `;
+    const button = { text: 'Verify Email', url: verificationUrl };
+
+    const html = emailTemplate(title, content, button);
+
     const message = {
-      from: process.env.EMAIL_FROM || 'noreply@mehfil.com',
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'Email Verification - Mehfil',
-      html: `
-        <h1>Welcome to Mehfil!</h1>
-        <p>Thank you for signing up. Please click the button below to verify your email address:</p>
-        <a href="${verificationUrl}" style="display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px;">Verify Email</a>
-        <p>If you didn't create an account with us, please ignore this email.</p>
-        <p>This link will expire in 24 hours.</p>
-        <p>Best regards,<br>Mehfil Team</p>
-      `
+      html,
     };
 
     try {
@@ -76,15 +83,18 @@ class EmailService {
   }
 
   static async sendVerificationSuccessEmail(email) {
+    const title = 'Email Verified Successfully!';
+    const content = `
+      <p>Welcome to the Mehfil community! Your email has been successfully verified, and you can now log in to your account.</p>
+    `;
+
+    const html = emailTemplate(title, content);
+
     const message = {
-      from: process.env.EMAIL_FROM || 'noreply@mehfil.com',
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'Email Verified Successfully - Mehfil',
-      html: `
-        <h1>Email Verified Successfully!</h1>
-        <p>Your email has been successfully verified. You can now log in to your Mehfil account.</p>
-        <p>Best regards,<br>Mehfil Team</p>
-      `
+      html,
     };
 
     try {

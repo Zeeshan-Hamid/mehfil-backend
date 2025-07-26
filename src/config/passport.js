@@ -44,7 +44,12 @@ module.exports = function(passport) {
           }
           
           // If user doesn't exist, create a new one
-          const role = req.query.state; // 'customer' or 'vendor'
+          // Get role from state parameter in the request
+          const role = req.query.state || req.body.state; // 'customer' or 'vendor'
+
+          if (!role || !['customer', 'vendor'].includes(role)) {
+            return done(new Error('Invalid role specified for Google OAuth'), null);
+          }
 
           const newUser = new User({
             email: profile.emails[0].value,

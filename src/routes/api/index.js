@@ -1,36 +1,28 @@
 const express = require('express');
 const router = express.Router();
 
-// Import route modules
 const authRoutes = require('./authRoutes');
 const eventRoutes = require('./eventRoutes');
-const cartRoutes = require('./cartRoutes');
-const searchRoutes = require('./searchRoutes');
-const newsletterRoutes = require('./newsletterRoutes');
-const favoriteRoutes = require('./favoriteRoutes');
-const todoRoutes = require('./todoRoutes');
 const bookingRoutes = require('./bookingRoutes');
+const cartRoutes = require('./cartRoutes');
+const favoriteRoutes = require('./favoriteRoutes');
+const searchRoutes = require('./searchRoutes');
 const customPackageRoutes = require('./customPackageRoutes');
+const newsletterRoutes = require('./newsletterRoutes');
+const todoRoutes = require('./todoRoutes');
+const vendorRoutes = require('./vendorRoutes');
+const dashboardRoutes = require('./dashboardRoutes');
 
-// Mount routes
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);
-router.use('/cart', cartRoutes);
-router.use('/search', searchRoutes);
-router.use('/newsletter', newsletterRoutes);
-router.use('/favorites', favoriteRoutes);
-router.use('/todos', todoRoutes);
 router.use('/bookings', bookingRoutes);
+router.use('/cart', cartRoutes);
+router.use('/favorites', favoriteRoutes);
+router.use('/search', searchRoutes);
 router.use('/custom-packages', customPackageRoutes);
-
-// Health check endpoint
-router.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'Mehfil API is running successfully',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
-  });
-});
+router.use('/newsletter', newsletterRoutes);
+router.use('/todos', todoRoutes);
+router.use('/vendor', vendorRoutes);
+router.use('/dashboard', dashboardRoutes);
 
 module.exports = router; 

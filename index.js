@@ -7,13 +7,21 @@ const requiredEnvVars = [
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_KEY',
   'AWS_REGION',
-  'S3_BUCKET_NAME'
+  'S3_BUCKET_NAME',
+  'EMAIL_USER',
+  'EMAIL_PASSWORD'
 ];
 
 for (const varName of requiredEnvVars) {
   if (!process.env[varName]) {
     throw new Error(`Environment variable ${varName} is missing.`);
   }
+}
+
+// Set default value for FRONTEND_URL if not provided
+if (!process.env.FRONTEND_URL) {
+  process.env.FRONTEND_URL = 'http://localhost:3000';
+  console.log(`FRONTEND_URL not set, using default: ${process.env.FRONTEND_URL}`);
 }
 
 const express = require('express');
@@ -27,7 +35,7 @@ const connectDB = require('./src/config/database');
 const apiRoutes = require('./src/routes/api');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8000;
 
 // Passport config
 require('./src/config/passport')(passport);
