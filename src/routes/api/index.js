@@ -13,6 +13,23 @@ const contactUsRoutes = require('./contactUsRoutes');
 const todoRoutes = require('./todoRoutes');
 const vendorRoutes = require('./vendorRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
+const messageRoutes = require('./messageRoutes');
+
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'API is running',
+    timestamp: new Date().toISOString(),
+    socket: {
+      enabled: true,
+      cors: {
+        origin: process.env.FRONTEND_URL || "http://localhost:3000",
+        methods: ["GET", "POST"]
+      }
+    }
+  });
+});
 
 router.use('/auth', authRoutes);
 router.use('/events', eventRoutes);
@@ -26,5 +43,6 @@ router.use('/contact-us', contactUsRoutes);
 router.use('/todos', todoRoutes);
 router.use('/vendor', vendorRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/messages', messageRoutes);
 
 module.exports = router; 

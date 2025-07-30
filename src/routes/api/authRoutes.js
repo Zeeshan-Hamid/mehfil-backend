@@ -60,6 +60,34 @@ router.post('/signup/vendor', validateVendorSignup, signupVendor);
 // @access  Public
 router.post('/login', validateLogin, login);
 
+// @route   GET /api/auth/me
+// @desc    Get current user profile
+// @access  Private
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        user
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // Test route to verify Google OAuth configuration
 // @route   GET /api/auth/google/test
 // @desc    Test Google OAuth configuration
