@@ -106,7 +106,7 @@ class SocketService {
     try {
       const { receiverId, eventId, content, messageType = 'text' } = data;
       
-      if (!receiverId || !eventId || !content) {
+      if (!receiverId || !content) {
         console.log('❌ [SocketService] Missing required fields for message');
         socket.emit('message_error', { message: 'Missing required fields' });
         return;
@@ -115,41 +115,55 @@ class SocketService {
       // Create message in database
       const conversationId = Message.generateConversationId(socket.userId, receiverId, eventId);
       
-      const newMessage = await Message.create({
+      const messageData = {
         conversationId,
         sender: socket.userId,
         receiver: receiverId,
         content,
-        messageType,
-        eventId
-      });
+        messageType
+      };
+
+      // Add eventId only if provided (for backward compatibility)
+      if (eventId) {
+        messageData.eventId = eventId;
+      }
+
+      const newMessage = await Message.create(messageData);
 
       // Populate sender details
       await newMessage.populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
 
       console.log('✅ [SocketService] Message saved to database:', newMessage._id);
 
-      // Emit to sender
-      socket.emit('message_sent', {
-        message: newMessage,
-        conversationId
-      });
-
-      // Emit to receiver if online
-      const receiverSocketId = this.userSockets.get(receiverId);
-      if (receiverSocketId) {
-        this.io.to(receiverSocketId).emit('new_message', {
-          message: newMessage,
-          conversationId
-        });
-        console.log('📨 [SocketService] Message sent to online receiver:', receiverId);
-      } else {
-        console.log('📨 [SocketService] Receiver offline, message saved:', receiverId);
-      }
+      this.broadcastMessage(newMessage);
 
     } catch (error) {
       console.error('❌ [SocketService] Error handling send message:', error);
       socket.emit('message_error', { message: 'Failed to send message' });
+    }
+  }
+
+  broadcastMessage(message) {
+    const { sender, receiver, conversationId } = message;
+    const senderId = sender._id.toString();
+    const receiverId = receiver.toString();
+
+    const senderSocketId = this.userSockets.get(senderId);
+    if (senderSocketId) {
+        this.io.to(senderSocketId).emit('message_sent', {
+            message,
+            conversationId
+        });
+        console.log('📨 [SocketService] Sent confirmation to sender:', senderId);
+    }
+
+    const receiverSocketId = this.userSockets.get(receiverId);
+    if (receiverSocketId) {
+        this.io.to(receiverSocketId).emit('new_message', {
+            message,
+            conversationId
+        });
+        console.log('📨 [SocketService] Sent new message to receiver:', receiverId);
     }
   }
 
@@ -160,7 +174,7 @@ class SocketService {
     if (receiverSocketId) {
       this.io.to(receiverSocketId).emit('user_typing', {
         userId: socket.userId,
-        eventId
+        eventId: eventId || null // Allow null eventId for vendor-only conversations
       });
     }
   }
@@ -172,7 +186,7 @@ class SocketService {
     if (receiverSocketId) {
       this.io.to(receiverSocketId).emit('user_stopped_typing', {
         userId: socket.userId,
-        eventId
+        eventId: eventId || null // Allow null eventId for vendor-only conversations
       });
     }
   }
@@ -240,4 +254,4 @@ class SocketService {
   }
 }
 
-module.exports = SocketService; 
+module.exports = SocketService;

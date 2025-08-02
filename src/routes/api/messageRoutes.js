@@ -7,8 +7,10 @@ const {
   sendMessage,
   markAsRead,
   getUnreadCount,
-  deleteConversation
+  deleteConversation,
+  getVendorConversation
 } = require('../../controllers/messageController');
+const { uploadInMemory } = require('../../services/fileUploadService');
 
 // All message routes require authentication
 router.use(protect);
@@ -19,8 +21,11 @@ router.get('/conversations', getConversations);
 // Get messages for a specific conversation
 router.get('/conversation/:eventId/:otherUserId', getConversation);
 
-// Send a message
-router.post('/send', sendMessage);
+// Get messages for vendor conversation (vendor-only, no event required)
+router.get('/vendor/:vendorId', getVendorConversation);
+
+// Send a message (handles both text and image uploads)
+router.post('/send', uploadInMemory.array('images', 4), sendMessage);
 
 // Mark messages as read
 router.patch('/read/:conversationId', markAsRead);
@@ -31,4 +36,4 @@ router.get('/unread-count', getUnreadCount);
 // Delete conversation for current user
 router.delete('/conversation/:conversationId', deleteConversation);
 
-module.exports = router; 
+module.exports = router;

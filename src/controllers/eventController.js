@@ -81,7 +81,7 @@ exports.getEvent = catchAsync(async (req, res, next) => {
     })
     .populate({
       path: 'vendor',
-      select: 'vendorProfile.ownerName role'
+      select: 'vendorProfile email phoneNumber'
     });
 
   if (!event) {

@@ -14,6 +14,7 @@ const todoRoutes = require('./todoRoutes');
 const vendorRoutes = require('./vendorRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const messageRoutes = require('./messageRoutes');
+const publicVendorRoutes = require('./publicVendorRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -44,5 +45,6 @@ router.use('/todos', todoRoutes);
 router.use('/vendor', vendorRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/messages', messageRoutes);
+router.use('/public-vendor', publicVendorRoutes);
 
 module.exports = router; 

@@ -23,8 +23,12 @@ const messageSchema = new mongoose.Schema({
   },
   messageType: {
     type: String,
-    enum: ['text', 'image', 'file'],
+    enum: ['text', 'image', 'document'],
     default: 'text'
+  },
+  originalFileName: {
+    type: String,
+    trim: true
   },
   isRead: {
     type: Boolean,
@@ -36,7 +40,7 @@ const messageSchema = new mongoose.Schema({
   eventId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Event',
-    required: true
+    required: false // Made optional since we're removing event dependency
   }
 }, {
   timestamps: true
@@ -62,18 +66,22 @@ messageSchema.methods.markAsRead = function() {
   return this.save();
 };
 
-// Static method to get conversation between two users for a specific event
-messageSchema.statics.getConversation = function(user1Id, user2Id, eventId) {
+// Static method to get conversation between two users (vendor-based, not event-based)
+messageSchema.statics.getConversation = function(user1Id, user2Id, eventId = null) {
   const conversationId = this.generateConversationId(user1Id, user2Id, eventId);
   return this.find({ conversationId })
     .populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName')
     .sort({ createdAt: 1 });
 };
 
-// Static method to generate conversation ID
-messageSchema.statics.generateConversationId = function(user1Id, user2Id, eventId) {
+// Static method to generate conversation ID (now vendor-based instead of event-based)
+messageSchema.statics.generateConversationId = function(user1Id, user2Id, eventId = null) {
   const sortedIds = [user1Id.toString(), user2Id.toString()].sort();
-  return `${sortedIds[0]}_${sortedIds[1]}_${eventId.toString()}`;
+  // If eventId is provided (for backward compatibility), use it, otherwise use vendor-only format
+  if (eventId) {
+    return `${sortedIds[0]}_${sortedIds[1]}_${eventId.toString()}`;
+  }
+  return `${sortedIds[0]}_${sortedIds[1]}`;
 };
 
 // Static method to get unread count for a user
@@ -84,7 +92,7 @@ messageSchema.statics.getUnreadCount = function(userId) {
   });
 };
 
-// Static method to get conversations for a user
+// Static method to get conversations for a user (updated to handle vendor-based conversations)
 messageSchema.statics.getConversations = function(userId) {
   const userIdObj = new mongoose.Types.ObjectId(userId);
   
@@ -112,7 +120,7 @@ messageSchema.statics.getConversations = function(userId) {
       $group: {
         _id: '$conversationId',
         lastMessage: { $last: '$$ROOT' },
-        eventId: { $first: '$eventId' },
+        eventId: { $first: '$eventId' }, // May be null for vendor-only conversations
         otherUser: { $first: '$otherUser' }
       }
     },

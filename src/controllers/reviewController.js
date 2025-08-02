@@ -42,10 +42,21 @@ exports.addReview = catchAsync(async (req, res, next) => {
     comment
   });
 
+  // Populate the review with customer details
+  const populatedReview = await Review.findById(newReview._id)
+    .populate({
+      path: 'customer',
+      select: 'customerProfile.fullName customerProfile.profileImage'
+    })
+    .populate({
+      path: 'event',
+      select: 'name'
+    });
+
   res.status(201).json({
     status: 'success',
     data: {
-      review: newReview
+      review: populatedReview
     }
   });
 });
@@ -60,6 +71,14 @@ exports.getEventReviews = catchAsync(async (req, res, next) => {
   const skip = (page - 1) * limit;
 
   const reviews = await Review.find({ event: eventId })
+    .populate({
+      path: 'customer',
+      select: 'customerProfile.fullName customerProfile.profileImage'
+    })
+    .populate({
+      path: 'event',
+      select: 'name'
+    })
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
@@ -106,7 +125,7 @@ exports.deleteReview = catchAsync(async (req, res, next) => {
     });
   }
 
-  await review.remove();
+  await Review.findByIdAndDelete(reviewId);
 
   res.status(204).json({
     status: 'success',

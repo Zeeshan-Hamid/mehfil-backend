@@ -81,15 +81,23 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
     });
 
     // Remove the event from the cart if it exists there
-    const user = await User.findById(customerId);
-    const cartItemIndex = user.customerProfile.customerCart.findIndex(item => 
-        item.event.equals(eventId) && 
-        item.package.equals(packageId) && 
-        item.packageType === packageType
-    );
-    if (cartItemIndex > -1) {
-        user.customerProfile.customerCart.splice(cartItemIndex, 1);
-        await user.save();
+    try {
+        await User.findOneAndUpdate(
+            { _id: customerId },
+            { 
+                $pull: { 
+                    'customerProfile.customerCart': { 
+                        event: eventId, 
+                        package: packageId, 
+                        packageType: packageType 
+                    } 
+                } 
+            }
+        );
+    } catch (cartError) {
+        // Log the error but don't fail the booking creation
+        console.error('Error removing item from cart:', cartError);
+        // Continue with booking creation even if cart removal fails
     }
 
     res.status(201).json({

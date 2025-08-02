@@ -78,7 +78,7 @@ app.use(passport.initialize());
 app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3000",
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -91,6 +91,11 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   next();
 });
+
+// Initialize Socket.IO service
+const socketService = new SocketService(io);
+app.set('socketService', socketService);
+
 
 // API Routes
 app.use('/api', apiRoutes);
@@ -123,8 +128,6 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Initialize Socket.IO service
-const socketService = new SocketService(io);
 
 // Start server
 server.listen(PORT, () => {
