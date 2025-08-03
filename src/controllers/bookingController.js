@@ -209,4 +209,100 @@ exports.updateBookingStatus = catchAsync(async (req, res, next) => {
             booking: populatedBooking
         }
     });
+});
+
+// @desc    Get booked vendors for a customer
+// @route   GET /api/bookings/booked-vendors
+// @access  Private (Customer only)
+exports.getBookedVendors = catchAsync(async (req, res, next) => {
+    const customerId = req.user.id;
+
+    // Check if user is a customer
+    if (req.user.role !== 'customer') {
+        return res.status(403).json({
+            success: false,
+            message: 'Only customers can access booked vendors'
+        });
+    }
+
+    // Get all bookings for the customer with vendor details
+    // Use lean() to avoid the pre-find hook and manually populate
+    const bookings = await Booking.find({ 
+        customer: customerId,
+        status: { $in: ['Pending', 'Confirmed'] } // Only active bookings
+    }).lean();
+    
+    // Manually populate vendor and event details
+    const populatedBookings = await Promise.all(
+        bookings.map(async (booking) => {
+            try {
+                const [vendor, event] = await Promise.all([
+                    User.findById(booking.vendor).select('vendorProfile.businessName vendorProfile.ownerName vendorProfile.description vendorProfile.rating vendorProfile.reviewCount email phoneNumber role'),
+                    Event.findById(booking.event).select('name imageUrls location')
+                ]);
+                
+                return {
+                    ...booking,
+                    vendor: vendor,
+                    event: event
+                };
+            } catch (error) {
+                console.error('Error populating booking details:', error);
+                return booking;
+            }
+        })
+    );
+
+    // Group vendors by vendor ID to avoid duplicates
+    const vendorMap = new Map();
+    
+    populatedBookings.forEach(booking => {
+        // Skip bookings with null or undefined vendor
+        if (!booking.vendor || !booking.vendor._id) {
+            console.warn('Skipping booking with null/undefined vendor:', booking._id);
+            return;
+        }
+        
+        // Skip if vendor is not actually a vendor
+        if (booking.vendor.role !== 'vendor') {
+            console.warn('Skipping booking with non-vendor user:', booking._id);
+            return;
+        }
+        
+        const vendorId = booking.vendor._id.toString();
+        
+        if (!vendorMap.has(vendorId)) {
+            vendorMap.set(vendorId, {
+                _id: booking.vendor._id,
+                businessName: booking.vendor.vendorProfile?.businessName || 'Unknown Business',
+                ownerName: booking.vendor.vendorProfile?.ownerName || 'Unknown Owner',
+                description: booking.vendor.vendorProfile?.description || 'No description available',
+                rating: booking.vendor.vendorProfile?.rating || 0,
+                reviewCount: booking.vendor.vendorProfile?.reviewCount || 0,
+                email: booking.vendor.email,
+                phoneNumber: booking.vendor.phoneNumber,
+                bookings: []
+            });
+        }
+        
+        // Add booking info to vendor
+        vendorMap.get(vendorId).bookings.push({
+            _id: booking._id,
+            eventName: booking.event?.name || 'Unknown Event',
+            eventDate: booking.eventDate,
+            status: booking.status,
+            totalPrice: booking.totalPrice,
+            attendees: booking.attendees
+        });
+    });
+
+    const bookedVendors = Array.from(vendorMap.values());
+
+    res.status(200).json({
+        success: true,
+        results: bookedVendors.length,
+        data: {
+            bookedVendors
+        }
+    });
 }); 

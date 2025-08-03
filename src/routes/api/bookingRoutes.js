@@ -6,13 +6,15 @@ const {
   getCustomerBookings,
   getVendorBookings,
   getBookingDetails,
-  updateBookingStatus
+  updateBookingStatus,
+  getBookedVendors
 } = require('../../controllers/bookingController');
 
 // --- Customer Routes ---
 // These routes are protected and for customers only
 router.post('/', protect, restrictTo('customer'), bookEvent);
 router.get('/my-bookings', protect, restrictTo('customer'), getCustomerBookings);
+router.get('/booked-vendors', protect, restrictTo('customer'), getBookedVendors);
 
 // --- Vendor Routes ---
 // This route is protected and for vendors only
