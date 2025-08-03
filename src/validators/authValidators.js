@@ -147,10 +147,40 @@ const validateResetPassword = [
     })
 ];
 
+// Change password validation
+const validateChangePassword = [
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('Current password is required'),
+  
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('New password must contain at least one lowercase letter, one uppercase letter, and one number')
+    .custom((value, { req }) => {
+      if (value === req.body.currentPassword) {
+        throw new Error('New password must be different from current password');
+      }
+      return true;
+    }),
+  
+  body('confirmPassword')
+    .notEmpty()
+    .withMessage('Password confirmation is required')
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    })
+];
+
 module.exports = {
   validateCustomerSignup,
   validateVendorSignup,
   validateLogin,
   validateForgotPassword,
-  validateResetPassword
+  validateResetPassword,
+  validateChangePassword
 }; 

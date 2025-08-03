@@ -8,7 +8,8 @@ const {
   markAsRead,
   getUnreadCount,
   deleteConversation,
-  getVendorConversation
+  getVendorConversation,
+  getCustomerConversation
 } = require('../../controllers/messageController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 
@@ -23,6 +24,9 @@ router.get('/conversation/:eventId/:otherUserId', getConversation);
 
 // Get messages for vendor conversation (vendor-only, no event required)
 router.get('/vendor/:vendorId', getVendorConversation);
+
+// Get messages for customer conversation (from vendor's perspective)
+router.get('/customer/:customerId', getCustomerConversation);
 
 // Send a message (handles both text and image uploads)
 router.post('/send', uploadInMemory.array('images', 4), sendMessage);

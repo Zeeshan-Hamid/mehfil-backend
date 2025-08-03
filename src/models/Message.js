@@ -124,6 +124,35 @@ messageSchema.statics.getConversations = function(userId) {
         otherUser: { $first: '$otherUser' }
       }
     },
+    // Add lookup to validate and populate the otherUser data
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'otherUser',
+        foreignField: '_id',
+        as: 'otherUserData'
+      }
+    },
+    // Filter out conversations where the other user no longer exists
+    {
+      $match: {
+        'otherUserData.0': { $exists: true }
+      }
+    },
+    // Replace otherUser ObjectId with populated user data
+    {
+      $addFields: {
+        otherUser: {
+          $arrayElemAt: ['$otherUserData', 0]
+        }
+      }
+    },
+    // Remove the temporary otherUserData field
+    {
+      $project: {
+        otherUserData: 0
+      }
+    },
     {
       $sort: { 'lastMessage.createdAt': -1 }
     }

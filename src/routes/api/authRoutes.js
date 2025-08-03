@@ -8,7 +8,8 @@ const {
   verifyResetToken,
   resetPassword,
   verifyEmail,
-  resendVerificationEmail
+  resendVerificationEmail,
+  changePassword
 } = require('../../controllers/auth/authController');
 const User = require('../../models/User');
 const { protect: authMiddleware } = require('../../middleware/authMiddleware');
@@ -18,7 +19,8 @@ const {
   validateVendorSignup,
   validateLogin,
   validateForgotPassword,
-  validateResetPassword
+  validateResetPassword,
+  validateChangePassword
 } = require('../../validators/authValidators');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
@@ -364,6 +366,11 @@ router.get('/reset-password/:token', verifyResetToken);
 // @desc    Reset password with token
 // @access  Public
 router.post('/reset-password/:token', validateResetPassword, resetPassword);
+
+// @route   PUT /api/auth/change-password
+// @desc    Change password for authenticated user
+// @access  Private
+router.put('/change-password', authMiddleware, validateChangePassword, changePassword);
 
 // @route   PUT /api/auth/profile
 // @desc    Update user profile

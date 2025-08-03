@@ -1,6 +1,7 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Event = require('../models/Event');
+const Notification = require('../models/Notification');
 const mongoose = require('mongoose');
 const { processAndUploadMessageImage, processAndUploadMultipleMessageImages, uploadMessageDocument } = require('../services/fileUploadService');
 
@@ -296,11 +297,31 @@ exports.sendMessage = catchAsync(async (req, res) => {
         
         console.log('✅ [MessageController] Message sent successfully:', newMessage._id);
 
-        if (socketService) {
-            console.log('📡 [MessageController] Broadcasting message via SocketService');
-            socketService.broadcastMessage(newMessage);
-        } else {
-            console.log('⚠️ [MessageController] SocketService not available');
+        // Create notification for the receiver
+        try {
+            const notification = await Notification.createMessageNotification({
+                sender: senderId,
+                receiver: receiverId,
+                message: newMessage
+            });
+            
+            console.log('🔔 [MessageController] Notification created:', notification._id);
+            
+            if (socketService) {
+                console.log('📡 [MessageController] Broadcasting message and notification via SocketService');
+                socketService.broadcastMessage(newMessage);
+                socketService.broadcastNotification(notification);
+                socketService.sendUnreadCountUpdate(receiverId); // Ensure receiver gets unread count update
+            } else {
+                console.log('⚠️ [MessageController] SocketService not available');
+            }
+        } catch (notificationError) {
+            console.error('❌ [MessageController] Error creating notification:', notificationError);
+            // Still broadcast the message even if notification fails
+            if (socketService) {
+                console.log('📡 [MessageController] Broadcasting message via SocketService (notification failed)');
+                socketService.broadcastMessage(newMessage);
+            }
         }
 
         res.status(201).json({
@@ -418,13 +439,30 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
   const currentUserId = req.user.id;
   
   try {
-    // Validate vendor exists
+    // Validate vendorId format first
+    if (!vendorId || !mongoose.Types.ObjectId.isValid(vendorId)) {
+      console.log('❌ [MessageController] Invalid vendor ID format:', vendorId);
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid vendor ID format'
+      });
+    }
+
+    // Validate vendor exists and has the correct role
     const vendor = await User.findById(vendorId).select('role vendorProfile.businessName vendorProfile.ownerName');
-    if (!vendor || vendor.role !== 'vendor') {
-      console.log('❌ [MessageController] Vendor not found:', vendorId);
+    if (!vendor) {
+      console.log('❌ [MessageController] Vendor not found in database:', vendorId);
       return res.status(404).json({
         status: 'fail',
         message: 'Vendor not found'
+      });
+    }
+    
+    if (vendor.role !== 'vendor') {
+      console.log('❌ [MessageController] User is not a vendor:', vendorId, 'Role:', vendor.role);
+      return res.status(404).json({
+        status: 'fail',
+        message: 'User is not a vendor'
       });
     }
     
@@ -469,6 +507,93 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
   }
 });
 
+// @desc    Get messages for customer conversation (from vendor's perspective)
+// @route   GET /api/messages/customer/:customerId
+// @access  Private (Vendor only)
+exports.getCustomerConversation = catchAsync(async (req, res) => {
+  console.log('🔍 [MessageController] Getting customer conversation for customer:', req.params.customerId);
+  
+  const { customerId } = req.params;
+  const currentUserId = req.user.id;
+  
+  try {
+    // Ensure current user is a vendor
+    const currentUser = await User.findById(currentUserId).select('role');
+    if (!currentUser || currentUser.role !== 'vendor') {
+      console.log('❌ [MessageController] Current user is not a vendor:', currentUserId);
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Access denied. Only vendors can access this endpoint.'
+      });
+    }
+
+    // Validate customerId format first
+    if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {
+      console.log('❌ [MessageController] Invalid customer ID format:', customerId);
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid customer ID format'
+      });
+    }
+
+    // Validate customer exists and has the correct role
+    const customer = await User.findById(customerId).select('role customerProfile.fullName customerProfile.profileImage');
+    if (!customer) {
+      console.log('❌ [MessageController] Customer not found in database:', customerId);
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Customer not found'
+      });
+    }
+    
+    if (customer.role !== 'customer') {
+      console.log('❌ [MessageController] User is not a customer:', customerId, 'Role:', customer.role);
+      return res.status(404).json({
+        status: 'fail',
+        message: 'User is not a customer'
+      });
+    }
+    
+    // Get conversation messages (vendor-to-customer format)
+    const messages = await Message.getConversation(currentUserId, customerId);
+    console.log('📨 [MessageController] Found messages:', messages.length);
+    
+    // Mark messages as read
+    await Message.updateMany(
+      {
+        conversationId: Message.generateConversationId(currentUserId, customerId),
+        receiver: currentUserId,
+        isRead: false
+      },
+      {
+        isRead: true,
+        readAt: new Date()
+      }
+    );
+    
+    const profileImage = customer.customerProfile?.profileImage || null;
+    
+    console.log('✅ [MessageController] Successfully retrieved customer conversation');
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        messages,
+        event: null, // No specific event for vendor-customer conversations
+        otherUser: {
+          _id: customer._id,
+          name: customer.customerProfile?.fullName || 'Customer',
+          role: customer.role,
+          profileImage: profileImage
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ [MessageController] Error getting customer conversation:', error);
+    throw error;
+  }
+});
+
 module.exports = {
   getConversations: exports.getConversations,
   getConversation: exports.getConversation,
@@ -476,5 +601,6 @@ module.exports = {
   markAsRead: exports.markAsRead,
   getUnreadCount: exports.getUnreadCount,
   deleteConversation: exports.deleteConversation,
-  getVendorConversation: exports.getVendorConversation
+  getVendorConversation: exports.getVendorConversation,
+  getCustomerConversation: exports.getCustomerConversation
 };

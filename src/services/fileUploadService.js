@@ -213,3 +213,50 @@ exports.uploadMessageDocument = async (file, userId, conversationId) => {
         throw new Error('Failed to upload document');
     }
 };
+
+// 5. Profile Image Upload Logic
+exports.processAndUploadProfileImage = async (file, userId) => {
+    try {
+        console.log('🔄 [FileUploadService] Starting profile image processing for user:', userId);
+
+        // Create a unique filename for the optimized profile image
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const newFilename = `profiles/${userId}-${uniqueSuffix}.webp`;
+        console.log('📄 [FileUploadService] New filename:', newFilename);
+
+        // Process the image: resize and convert to WebP with optimized settings
+        const processedBuffer = await sharp(file.buffer)
+            .resize({ 
+                width: 400, 
+                height: 400, 
+                fit: 'cover', 
+                position: 'center'
+            }) // Square profile image, 400x400
+            .webp({ 
+                quality: 85,
+                effort: 4, // Higher compression effort for smaller file size
+                nearLossless: false // Better compression
+            }) // Convert to WebP with 85% quality
+            .toBuffer();
+        console.log('✅ [FileUploadService] Profile image processed successfully');
+
+        // Upload to S3
+        await s3.upload({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: newFilename,
+            Body: processedBuffer,
+            ContentType: 'image/webp',
+            CacheControl: 'public, max-age=31536000' // Cache for 1 year
+        }).promise();
+        console.log('✅ [FileUploadService] Profile image uploaded to S3');
+
+        // Return the public URL of the uploaded file
+        const imageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${newFilename}`;
+        console.log('🔗 [FileUploadService] Profile image URL:', imageUrl);
+
+        return imageUrl;
+    } catch (error) {
+        console.error('❌ [FileUploadService] Error processing/uploading profile image:', error);
+        throw new Error('Failed to process and upload profile image');
+    }
+};

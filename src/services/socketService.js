@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Message = require('../models/Message');
+const Notification = require('../models/Notification');
 
 class SocketService {
   constructor(io) {
@@ -91,6 +92,17 @@ class SocketService {
         await this.handleMarkAsRead(socket, data);
       });
 
+      // Handle notification events
+      socket.on('mark_notification_read', async (data) => {
+        console.log('🔔 [SocketService] Marking notification as read:', data);
+        await this.handleMarkNotificationAsRead(socket, data);
+      });
+
+      socket.on('get_notifications', async (data) => {
+        console.log('🔔 [SocketService] Getting notifications for user:', socket.userId);
+        await this.handleGetNotifications(socket, data);
+      });
+
       // Handle disconnect
       socket.on('disconnect', (reason) => {
         console.log('🔌 [SocketService] User disconnected:', socket.userId);
@@ -135,7 +147,40 @@ class SocketService {
 
       console.log('✅ [SocketService] Message saved to database:', newMessage._id);
 
+      // Create notification for the receiver FIRST
+      console.log('🔔 [SocketService] Attempting to create notification for receiver:', receiverId);
+      
+      let notification = null;
+      try {
+        notification = await Notification.createMessageNotification({
+          sender: socket.userId,
+          receiver: receiverId,
+          message: newMessage
+        });
+        
+        console.log('🔔 [SocketService] Notification created successfully:', notification._id);
+        console.log('🔔 [SocketService] Notification details:', {
+          recipient: notification.recipient,
+          sender: notification.sender,
+          title: notification.title,
+          message: notification.message
+        });
+        
+      } catch (notificationError) {
+        console.error('❌ [SocketService] Error creating notification:', notificationError);
+        console.error('❌ [SocketService] Error stack:', notificationError.stack);
+      }
+
+      // Then broadcast the message
+      console.log('📤 [SocketService] Broadcasting message...');
       this.broadcastMessage(newMessage);
+      
+      // Finally broadcast notification if it was created successfully
+      if (notification) {
+        console.log('🔔 [SocketService] Broadcasting notification...');
+        this.broadcastNotification(notification);
+        this.sendUnreadCountUpdate(receiverId);
+      }
 
     } catch (error) {
       console.error('❌ [SocketService] Error handling send message:', error);
@@ -144,26 +189,46 @@ class SocketService {
   }
 
   broadcastMessage(message) {
-    const { sender, receiver, conversationId } = message;
-    const senderId = sender._id.toString();
-    const receiverId = receiver.toString();
+    try {
+      console.log('📤 [SocketService] Broadcasting message with data:', {
+        messageId: message._id,
+        sender: message.sender,
+        receiver: message.receiver,
+        conversationId: message.conversationId
+      });
+      
+      const { sender, receiver, conversationId } = message;
+      const senderId = sender._id ? sender._id.toString() : sender.toString();
+      const receiverId = receiver._id ? receiver._id.toString() : receiver.toString();
 
-    const senderSocketId = this.userSockets.get(senderId);
-    if (senderSocketId) {
-        this.io.to(senderSocketId).emit('message_sent', {
-            message,
-            conversationId
-        });
-        console.log('📨 [SocketService] Sent confirmation to sender:', senderId);
-    }
+      console.log('📤 [SocketService] Extracted IDs:', { senderId, receiverId });
 
-    const receiverSocketId = this.userSockets.get(receiverId);
-    if (receiverSocketId) {
-        this.io.to(receiverSocketId).emit('new_message', {
-            message,
-            conversationId
-        });
-        console.log('📨 [SocketService] Sent new message to receiver:', receiverId);
+      const senderSocketId = this.userSockets.get(senderId);
+      if (senderSocketId) {
+          this.io.to(senderSocketId).emit('message_sent', {
+              message,
+              conversationId
+          });
+          console.log('📨 [SocketService] Sent confirmation to sender:', senderId);
+      } else {
+          console.log('⚠️ [SocketService] Sender not online:', senderId);
+      }
+
+      const receiverSocketId = this.userSockets.get(receiverId);
+      if (receiverSocketId) {
+          this.io.to(receiverSocketId).emit('new_message', {
+              message,
+              conversationId
+          });
+          console.log('📨 [SocketService] Sent new message to receiver:', receiverId);
+      } else {
+          console.log('⚠️ [SocketService] Receiver not online:', receiverId);
+      }
+      
+      console.log('✅ [SocketService] Message broadcast completed');
+    } catch (error) {
+      console.error('❌ [SocketService] Error in broadcastMessage:', error);
+      console.error('❌ [SocketService] Error stack:', error.stack);
     }
   }
 
@@ -251,6 +316,113 @@ class SocketService {
   // Get online users count
   getOnlineUsersCount() {
     return this.userSockets.size;
+  }
+
+  // Broadcast notification to user
+  broadcastNotification(notification) {
+    const recipientId = notification.recipient._id 
+      ? notification.recipient._id.toString() 
+      : notification.recipient.toString();
+    
+    console.log('🔔 [SocketService] Broadcasting notification to user:', recipientId);
+    
+    const recipientSocketId = this.userSockets.get(recipientId);
+    if (recipientSocketId) {
+      this.io.to(recipientSocketId).emit('new_notification', {
+        notification
+      });
+      console.log('✅ [SocketService] Notification sent to user:', recipientId);
+      return true;
+    } else {
+      console.log('⚠️ [SocketService] User not online for notification:', recipientId);
+      return false;
+    }
+  }
+
+  // Handle marking notification as read via socket
+  async handleMarkNotificationAsRead(socket, data) {
+    try {
+      const { notificationId } = data;
+      
+      if (!notificationId) {
+        socket.emit('notification_error', { message: 'Missing notification ID' });
+        return;
+      }
+
+      const notification = await Notification.findOne({
+        _id: notificationId,
+        recipient: socket.userId
+      });
+
+      if (!notification) {
+        socket.emit('notification_error', { message: 'Notification not found' });
+        return;
+      }
+
+      if (!notification.isRead) {
+        await notification.markAsRead();
+      }
+
+      // Send updated unread count
+      const unreadCount = await Notification.getUnreadCount(socket.userId);
+      
+      socket.emit('notification_read_success', {
+        notificationId,
+        unreadCount
+      });
+
+      console.log('✅ [SocketService] Notification marked as read via socket:', notificationId);
+
+    } catch (error) {
+      console.error('❌ [SocketService] Error marking notification as read:', error);
+      socket.emit('notification_error', { message: 'Failed to mark notification as read' });
+    }
+  }
+
+  // Handle getting notifications via socket
+  async handleGetNotifications(socket, data) {
+    try {
+      const { page = 1, limit = 20, type, unreadOnly = false } = data || {};
+      
+      const notifications = await Notification.getNotifications(socket.userId, {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        type,
+        unreadOnly
+      });
+
+      const unreadCount = await Notification.getUnreadCount(socket.userId);
+
+      socket.emit('notifications_loaded', {
+        notifications,
+        unreadCount,
+        page: parseInt(page),
+        hasMore: notifications.length === parseInt(limit)
+      });
+
+      console.log('✅ [SocketService] Notifications sent via socket:', notifications.length);
+
+    } catch (error) {
+      console.error('❌ [SocketService] Error getting notifications via socket:', error);
+      socket.emit('notification_error', { message: 'Failed to load notifications' });
+    }
+  }
+
+  // Send unread count update to user
+  async sendUnreadCountUpdate(userId) {
+    try {
+      const unreadCount = await Notification.getUnreadCount(userId);
+      const sent = this.sendToUser(userId, 'unread_count_update', { unreadCount });
+      
+      if (sent) {
+        console.log('📊 [SocketService] Sent unread count update to user:', userId, 'Count:', unreadCount);
+      }
+      
+      return sent;
+    } catch (error) {
+      console.error('❌ [SocketService] Error sending unread count update:', error);
+      return false;
+    }
   }
 }
 
