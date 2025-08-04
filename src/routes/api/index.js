@@ -18,6 +18,7 @@ const notificationRoutes = require('./notificationRoutes');
 const publicVendorRoutes = require('./publicVendorRoutes');
 const customerRoutes = require('./customerRoutes');
 const userEventRoutes = require('./userEventRoutes');
+const chatbotRoutes = require('./chatbotRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -52,5 +53,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/public-vendor', publicVendorRoutes);
 router.use('/customer', customerRoutes);
 router.use('/user-events', userEventRoutes);
+router.use('/chatbot', chatbotRoutes);
 
 module.exports = router; 
