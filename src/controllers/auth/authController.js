@@ -176,16 +176,16 @@ const signupVendor = async (req, res) => {
         businessName,
         ownerName,
         businessAddress: {
-          street,
-          city,
-          state,
+          street: street || undefined,
+          city: city || undefined,
+          state: state || undefined,
           country: country || 'United States',
           zipCode
         },
         // Set default values for required fields - we'll set these as temporary values
         serviceDescription: 'Service description to be updated during profile setup',
         experienceYears: 0,
-        serviceAreas: [city],
+        serviceAreas: city ? [city] : [],
         pricing: {
           startingPrice: 0,
           currency: 'USD',

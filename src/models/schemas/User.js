@@ -272,30 +272,18 @@ const userSchema = new mongoose.Schema(
       businessAddress: {
         street: {
           type: String,
-          required: function () {
-            return this.role === "vendor" && this.authProvider === "email";
-          },
           trim: true,
         },
         city: {
           type: String,
-          required: function () {
-            return this.role === "vendor" && this.authProvider === "email";
-          },
           trim: true,
         },
         state: {
           type: String,
-          required: function () {
-            return this.role === "vendor" && this.authProvider === "email";
-          },
           trim: true,
         },
         country: {
           type: String,
-          required: function () {
-            return this.role === "vendor" && this.authProvider === "email";
-          },
           trim: true,
           default: "United States",
         },
@@ -658,10 +646,6 @@ userSchema.pre("save", function (next) {
         ownerName &&
         this.phoneNumber &&
         businessAddress &&
-        businessAddress.street &&
-        businessAddress.city &&
-        businessAddress.state &&
-        businessAddress.country &&
         businessAddress.zipCode
       )
     });
@@ -671,10 +655,6 @@ userSchema.pre("save", function (next) {
       ownerName &&
       this.phoneNumber &&
       businessAddress &&
-      businessAddress.street &&
-      businessAddress.city &&
-      businessAddress.state &&
-      businessAddress.country &&
       businessAddress.zipCode
     ) {
       this.vendorProfile.profileCompleted = true;
@@ -741,7 +721,17 @@ userSchema.virtual("customerFullLocation").get(function () {
 userSchema.virtual("vendorFullBusinessAddress").get(function () {
   if (this.role !== "vendor" || !this.vendorProfile.businessAddress)
     return null;
-  return `${this.vendorProfile.businessAddress.street}, ${this.vendorProfile.businessAddress.city}, ${this.vendorProfile.businessAddress.state}, ${this.vendorProfile.businessAddress.country} ${this.vendorProfile.businessAddress.zipCode}`;
+  
+  const address = this.vendorProfile.businessAddress;
+  const addressParts = [
+    address.street,
+    address.city,
+    address.state,
+    address.country,
+    address.zipCode
+  ].filter(part => part && part !== 'undefined' && part.trim() !== '');
+  
+  return addressParts.join(', ');
 });
 
 // Virtual for user display name
@@ -765,6 +755,23 @@ userSchema.set("toJSON", {
       delete ret.vendorProfile;
     } else if (ret.role === "vendor") {
       delete ret.customerProfile;
+      
+      // Clean up undefined address fields in vendor profile
+      if (ret.vendorProfile && ret.vendorProfile.businessAddress) {
+        const address = ret.vendorProfile.businessAddress;
+        if (address.street === undefined || address.street === 'undefined') {
+          delete address.street;
+        }
+        if (address.city === undefined || address.city === 'undefined') {
+          delete address.city;
+        }
+        if (address.state === undefined || address.state === 'undefined') {
+          delete address.state;
+        }
+        if (address.country === undefined || address.country === 'undefined') {
+          delete address.country;
+        }
+      }
     }
 
     // Also remove the internal version key for a cleaner output

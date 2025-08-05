@@ -19,6 +19,7 @@ const publicVendorRoutes = require('./publicVendorRoutes');
 const customerRoutes = require('./customerRoutes');
 const userEventRoutes = require('./userEventRoutes');
 const chatbotRoutes = require('./chatbotRoutes');
+const invoiceRoutes = require('./invoiceRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -54,5 +55,6 @@ router.use('/public-vendor', publicVendorRoutes);
 router.use('/customer', customerRoutes);
 router.use('/user-events', userEventRoutes);
 router.use('/chatbot', chatbotRoutes);
+router.use('/invoices', invoiceRoutes);
 
 module.exports = router; 

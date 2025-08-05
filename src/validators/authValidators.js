@@ -82,31 +82,61 @@ const validateVendorSignup = [
   phoneValidation,
 
   body('street')
+    .optional()
     .trim()
-    .isLength({ min: 5, max: 200 })
-    .withMessage('Street address must be between 5 and 200 characters'),
+    .custom((value) => {
+      if (value && value.trim() !== '') {
+        if (value.length < 5 || value.length > 200) {
+          throw new Error('Street address must be between 5 and 200 characters');
+        }
+      }
+      return true;
+    }),
 
   body('city')
+    .optional()
     .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('City must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s]+$/)
-    .withMessage('City can only contain letters and spaces'),
+    .custom((value) => {
+      if (value && value.trim() !== '') {
+        if (value.length < 2 || value.length > 50) {
+          throw new Error('City must be between 2 and 50 characters');
+        }
+        if (!/^[a-zA-Z\s]+$/.test(value)) {
+          throw new Error('City can only contain letters and spaces');
+        }
+      }
+      return true;
+    }),
 
   body('state')
+    .optional()
     .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('State must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s]+$/)
-    .withMessage('State can only contain letters and spaces'),
+    .custom((value) => {
+      if (value && value.trim() !== '') {
+        if (value.length < 2 || value.length > 50) {
+          throw new Error('State must be between 2 and 50 characters');
+        }
+        if (!/^[a-zA-Z\s]+$/.test(value)) {
+          throw new Error('State can only contain letters and spaces');
+        }
+      }
+      return true;
+    }),
 
   body('country')
     .optional()
     .trim()
-    .isLength({ min: 2, max: 50 })
-    .withMessage('Country must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s]+$/)
-    .withMessage('Country can only contain letters and spaces'),
+    .custom((value) => {
+      if (value && value.trim() !== '') {
+        if (value.length < 2 || value.length > 50) {
+          throw new Error('Country must be between 2 and 50 characters');
+        }
+        if (!/^[a-zA-Z\s]+$/.test(value)) {
+          throw new Error('Country can only contain letters and spaces');
+        }
+      }
+      return true;
+    }),
 
   body('zipCode')
     .trim()
