@@ -48,6 +48,11 @@ exports.protect = catchAsync(async (req, res, next) => {
 
   // Grant access to protected route
   req.user = currentUser;
+  console.log('Auth middleware - User set:', {
+    userId: currentUser._id.toString(),
+    userRole: currentUser.role,
+    userEmail: currentUser.email
+  });
   next();
 });
 
