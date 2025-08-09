@@ -1,11 +1,24 @@
 const Review = require('../models/Review');
 const Event = require('../models/Event');
+const OpenAI = require('openai');
 
 // A simplified error handler
 const catchAsync = fn => {
   return (req, res, next) => {
     fn(req, res, next).catch(next);
   };
+};
+
+// Lazy/singleton OpenAI client initializer (avoids repeated construction)
+let cachedOpenAI = null;
+const getOpenAIClient = () => {
+  if (!cachedOpenAI) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY environment variable is required');
+    }
+    cachedOpenAI = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return cachedOpenAI;
 };
 
 // @desc    Add a review to an event
@@ -199,9 +212,76 @@ exports.getVendorReviews = catchAsync(async (req, res, next) => {
     });
 });
 
+// @desc    Get AI-generated summary of the most recent reviews for an event (listing)
+// @route   GET /api/events/:eventId/reviews/summary
+// @access  Public
+exports.getEventReviewSummary = catchAsync(async (req, res) => {
+  const { eventId } = req.params;
+
+  // Ensure the event exists
+  const event = await Event.findById(eventId).select('_id name');
+  if (!event) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'No event found with that ID'
+    });
+  }
+
+  // Get the 30 most recent reviews
+  const recentReviews = await Review.find({ event: eventId })
+    .select('rating comment createdAt')
+    .sort({ createdAt: -1 })
+    .limit(30)
+    .lean();
+
+  if (!recentReviews || recentReviews.length === 0) {
+    return res.status(200).json({
+      status: 'success',
+      data: { summary: null, totalReviewsConsidered: 0 }
+    });
+  }
+
+  // Build a compact text of reviews for the prompt
+  const reviewsText = recentReviews
+    .map((r, idx) => {
+      const rating = typeof r.rating === 'number' ? r.rating : 'N/A';
+      let comment = (r.comment || '').toString().replace(/\s+/g, ' ').trim();
+      if (comment.length > 220) comment = comment.slice(0, 220) + '…';
+      return `${idx + 1}. Rating: ${rating}/5${comment ? ` | Comment: ${comment}` : ''}`;
+    })
+    .join('\n');
+
+  const systemPrompt = `You are an assistant that writes very concise, neutral summaries of customer reviews for an event listing. Capture common themes, sentiment, strengths/weaknesses, and any consistent complaints. Keep it factual and avoid exaggeration. Output 2-4 sentences only.`;
+
+  const userPrompt = `Event: ${event.name || 'Listing'}\nYou are given the 30 most recent reviews. Write a concise summary of what customers are saying.\n\nReviews:\n${reviewsText}`;
+
+  // Generate with OpenAI
+  const openai = getOpenAIClient();
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    max_tokens: 220,
+    temperature: 0.3
+  });
+
+  const summary = completion.choices?.[0]?.message?.content?.trim() || null;
+
+  return res.status(200).json({
+    status: 'success',
+    data: {
+      summary,
+      totalReviewsConsidered: recentReviews.length
+    }
+  });
+});
+
 module.exports = {
   addReview: exports.addReview,
   getEventReviews: exports.getEventReviews,
   deleteReview: exports.deleteReview,
-  getVendorReviews: exports.getVendorReviews
+  getVendorReviews: exports.getVendorReviews,
+  getEventReviewSummary: exports.getEventReviewSummary
 }; 
