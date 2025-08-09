@@ -404,6 +404,12 @@ const userSchema = new mongoose.Schema(
         default: false,
       },
 
+      // Profile Image
+      vendorProfileImage: {
+        type: String,
+        default: null,
+      },
+
       // Portfolio & Media
       portfolio: {
         images: {
