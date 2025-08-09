@@ -1,5 +1,10 @@
 const Invoice = require('../models/Invoice');
 const { validationResult } = require('express-validator');
+const https = require('https');
+const AWS = require('aws-sdk');
+// Extend jsPDF with autoTable when generating PDFs
+// Note: require side-effect is safe here; it augments jsPDF prototype
+// We will require it inside the download handler to avoid loading cost if not used elsewhere
 
 // @desc    Create a new invoice
 // @route   POST /api/invoices
@@ -363,6 +368,54 @@ const updateOverdueInvoices = async (req, res) => {
   }
 };
 
+// One-time configured absolute logo URL (set via env or hardcoded after upload)
+const MEHFIL_LOGO_URL = process.env.MEHFIL_LOGO_ABSOLUTE_URL || ' https://mehfil-images.s3.eu-north-1.amazonaws.com/branding/logo-black-1754731552840.png';
+
+async function fetchImageAsDataUrl(imageUrl) {
+  return new Promise((resolve, reject) => {
+    try {
+      https.get(imageUrl, (res) => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(new Error(`Failed to fetch image. Status: ${res.statusCode}`));
+          return;
+        }
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          // Default to PNG; adjust if you decide to upload JPEG
+          const dataUrl = `data:image/png;base64,${buffer.toString('base64')}`;
+          resolve(dataUrl);
+        });
+      }).on('error', reject);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function fetchS3ImageAsDataUrlFromUrl(s3Url) {
+  try {
+    // Match virtual-hosted style: https://bucket.s3.region.amazonaws.com/key
+    const match = s3Url.match(/^https?:\/\/([^\.]+)\.s3\.([^.]+)\.amazonaws\.com\/(.+)$/);
+    if (!match) return null;
+    const [, bucket, region, key] = match;
+
+    const s3 = new AWS.S3({
+      region: process.env.AWS_REGION || region,
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_KEY
+    });
+
+    const result = await s3.getObject({ Bucket: bucket, Key: key }).promise();
+    const contentType = result.ContentType || 'image/png';
+    const base64 = Buffer.from(result.Body).toString('base64');
+    return `data:${contentType};base64,${base64}`;
+  } catch (_) {
+    return null;
+  }
+}
+
 // @desc    Download invoice as PDF
 // @route   GET /api/invoices/:id/download
 // @access  Private (Vendor only)
@@ -380,101 +433,235 @@ const downloadInvoice = async (req, res) => {
       });
     }
 
-    // Generate PDF using jsPDF
+    // Generate PDF using jsPDF with professional layout
     const { jsPDF } = require('jspdf');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    
-    // Set font
-    pdf.setFont('helvetica');
-    
-    // Add content to PDF
-    let yPosition = 20;
-    
-    // Header
-    pdf.setFontSize(24);
-    pdf.setTextColor(175, 142, 186); // #AF8EBA
-    pdf.text('INVOICE', 20, yPosition);
-    yPosition += 20;
-    
-    // Invoice details
+    const autoTableModule = require('jspdf-autotable');
+    const autoTable =
+      typeof autoTableModule === 'function'
+        ? autoTableModule
+        : (autoTableModule && (autoTableModule.default || autoTableModule.autoTable));
+    if (typeof autoTable !== 'function') {
+      throw new TypeError('jspdf-autotable could not be loaded as a function');
+    }
+
+    const brandPurple = [175, 142, 186]; // #AF8EBA
+    const grayText = [73, 80, 87];
+    const lightBorder = [220, 223, 230];
+
+    // Use points for easier sizing (A4: 595.28 x 841.89 pt)
+    const pdf = new jsPDF('p', 'pt', 'a4');
+    pdf.setFont('helvetica', 'normal');
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 40; // 40pt margin
+
+    // Always use the configured absolute logo URL (uploaded once to S3)
+    let logoDataUrl = null;
+    try {
+      if (MEHFIL_LOGO_URL && MEHFIL_LOGO_URL.startsWith('http')) {
+        logoDataUrl = await fetchImageAsDataUrl(MEHFIL_LOGO_URL);
+        if (!logoDataUrl) {
+          // Try fetching via AWS SDK (works even if the object is private)
+          logoDataUrl = await fetchS3ImageAsDataUrlFromUrl(MEHFIL_LOGO_URL);
+        }
+      }
+    } catch (_) {
+      // Fallback: no image; we'll render brand text instead
+    }
+
+    // Header band
+    const headerHeight = 70;
+    pdf.setFillColor(255, 255, 255);
+    pdf.rect(0, 0, pageWidth, headerHeight + margin / 2, 'F');
+
+    // Logo on the left (preserve aspect ratio, cap height)
+    const logoY = margin;
+    let cursorX = margin;
+    if (logoDataUrl) {
+      try {
+        const maxLogoHeight = 36; // pt (increase size)
+        const maxLogoWidth = 180; // pt (increase size)
+        let drawWidth = 100;
+        let drawHeight = 24;
+        try {
+          const props = pdf.getImageProperties(logoDataUrl);
+          if (props && props.width && props.height) {
+            const ratio = props.width / props.height;
+            drawHeight = Math.min(maxLogoHeight, props.height);
+            drawWidth = drawHeight * ratio;
+            if (drawWidth > maxLogoWidth) {
+              drawWidth = maxLogoWidth;
+              drawHeight = drawWidth / ratio;
+            }
+          }
+        } catch (_) { /* fallback to defaults above */ }
+        pdf.addImage(logoDataUrl, 'PNG', cursorX, logoY, drawWidth, drawHeight, undefined, 'FAST');
+      } catch (_) {
+        pdf.setFontSize(22);
+        pdf.setTextColor(...brandPurple);
+        pdf.text('MEHFIL', cursorX, logoY + 22);
+      }
+    } else {
+      pdf.setFontSize(22);
+      pdf.setTextColor(...brandPurple);
+      pdf.text('MEHFIL', cursorX, logoY + 22);
+    }
+
+    // Invoice title and meta on the right
+    const rightBoxX = pageWidth - margin - 220;
+    pdf.setFontSize(26);
+    pdf.setTextColor(...brandPurple);
+    pdf.text('INVOICE', rightBoxX, logoY + 8);
+
+    pdf.setFontSize(11);
+    pdf.setTextColor(...grayText);
+    const metaYStart = logoY + 26;
+    pdf.text(`Invoice #: ${invoice.invoiceNumber}`, rightBoxX, metaYStart);
+    pdf.text(`Date: ${invoice.formattedInvoiceDate || new Date(invoice.invoiceDate).toLocaleDateString()}`, rightBoxX, metaYStart + 16);
+    pdf.text(`Due Date: ${invoice.formattedDueDate || new Date(invoice.dueDate).toLocaleDateString()}`, rightBoxX, metaYStart + 32);
+    pdf.text(`Status: ${invoice.status}`, rightBoxX, metaYStart + 48);
+
+    // Separator line (only under right meta to avoid overlapping Bill To area)
+    pdf.setDrawColor(...lightBorder);
+    pdf.setLineWidth(1);
+    pdf.line(rightBoxX, headerHeight + margin / 2, pageWidth - margin, headerHeight + margin / 2);
+
+    // Bill To box
+    let cursorY = headerHeight + margin;
     pdf.setFontSize(12);
     pdf.setTextColor(0, 0, 0);
-    pdf.text(`Invoice #: ${invoice.invoiceNumber}`, 20, yPosition);
-    yPosition += 8;
-    pdf.text(`Date: ${invoice.formattedInvoiceDate || invoice.invoiceDate.toLocaleDateString()}`, 20, yPosition);
-    yPosition += 8;
-    pdf.text(`Due Date: ${invoice.formattedDueDate || invoice.dueDate.toLocaleDateString()}`, 20, yPosition);
-    yPosition += 20;
-    
-    // Client information
-    pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('Bill To:', 20, yPosition);
-    yPosition += 8;
+    pdf.text('Bill To', margin, cursorY);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(invoice.clientName, 20, yPosition);
-    yPosition += 8;
+    pdf.setTextColor(...grayText);
+    cursorY += 18;
+    pdf.text(invoice.clientName || 'Client', margin, cursorY);
     if (invoice.event) {
-      pdf.text(`Event: ${invoice.event}`, 20, yPosition);
-      yPosition += 20;
-    } else {
-      yPosition += 12;
+      cursorY += 16;
+      pdf.text(`Event: ${invoice.event}`, margin, cursorY);
     }
-    
-    // Items table header
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Description', 20, yPosition);
-    pdf.text('Qty', 100, yPosition);
-    pdf.text('Unit Price', 130, yPosition);
-    pdf.text('Total', 170, yPosition);
-    yPosition += 8;
-    
-    // Items
-    pdf.setFont('helvetica', 'normal');
-    invoice.items.forEach(item => {
-      pdf.text(item.description, 20, yPosition);
-      pdf.text(item.quantity.toString(), 100, yPosition);
-      pdf.text(`$${item.unitPrice.toFixed(2)}`, 130, yPosition);
-      pdf.text(`$${(item.quantity * item.unitPrice).toFixed(2)}`, 170, yPosition);
-      yPosition += 8;
+
+    // Items table using autoTable for professional borders and layout
+    const currency = (n) => {
+      const num = Number(n || 0);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+    };
+
+    const tableBody = (invoice.items || []).map((item) => [
+      item.description || '-',
+      String(item.quantity ?? 0),
+      currency(item.unitPrice),
+      currency((item.quantity || 0) * (item.unitPrice || 0))
+    ]);
+
+    const tableStartY = cursorY + 24;
+    autoTable(pdf, {
+      head: [['Description', 'Qty', 'Unit Price', 'Amount']],
+      body: tableBody,
+      startY: tableStartY,
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        textColor: [34, 34, 34],
+        lineColor: lightBorder,
+        lineWidth: 0.8,
+        cellPadding: 8,
+      },
+      headStyles: {
+        fillColor: brandPurple,
+        textColor: 255,
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: { fillColor: [250, 248, 252] },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { halign: 'center', cellWidth: 60 },
+        2: { halign: 'right', cellWidth: 100 },
+        3: { halign: 'right', cellWidth: 110 },
+      },
+      margin: { left: margin, right: margin },
     });
-    
-    yPosition += 10;
-    
-    // Totals
+
+    let afterTableY = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : tableStartY) + 12;
+
+    // Totals table aligned to the right
+    const totalsRows = [];
     if (invoice.adjustmentsTotal > 0) {
-      pdf.text(`Adjustments: $${invoice.adjustmentsTotal.toFixed(2)}`, 120, yPosition);
-      yPosition += 8;
+      totalsRows.push(['Adjustments', currency(invoice.adjustmentsTotal)]);
     }
-    pdf.text(`Subtotal: $${invoice.subtotal.toFixed(2)}`, 120, yPosition);
-    yPosition += 8;
+    totalsRows.push(['Subtotal', currency(invoice.subtotal)]);
     if (invoice.taxAmount > 0) {
-      pdf.text(`Tax: $${invoice.taxAmount.toFixed(2)}`, 120, yPosition);
-      yPosition += 8;
+      totalsRows.push([`Tax (${Number(invoice.taxRate || 0)}%)`, currency(invoice.taxAmount)]);
     }
+    totalsRows.push(['Total', currency(invoice.total)]);
+
+    autoTable(pdf, {
+      body: totalsRows,
+      startY: afterTableY,
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        textColor: [34, 34, 34],
+        lineColor: lightBorder,
+        lineWidth: 0.8,
+        cellPadding: 6,
+      },
+      columnStyles: {
+        0: { cellWidth: 140 },
+        1: { cellWidth: 120, halign: 'right' },
+      },
+      didParseCell: (data) => {
+        // Make the last row (Total) bold
+        if (data.row.index === totalsRows.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
+      margin: { left: pageWidth - margin - 260, right: margin },
+    });
+
+    afterTableY = pdf.lastAutoTable.finalY + 16;
+
+    // Payment method and notes box
+    const boxWidth = pageWidth - margin * 2;
+    const boxHeight = 90;
+    pdf.setDrawColor(...lightBorder);
+    pdf.setLineWidth(1);
+    pdf.roundedRect(margin, afterTableY, boxWidth, boxHeight, 6, 6, 'S');
+
+    const boxPadding = 12;
+    pdf.setFontSize(12);
+    pdf.setTextColor(0, 0, 0);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(`Total: $${invoice.total.toFixed(2)}`, 120, yPosition);
-    
-    // Payment method
-    yPosition += 20;
+    pdf.text('Payment', margin + boxPadding, afterTableY + 20);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Payment Method: ${invoice.paymentOption}`, 20, yPosition);
-    
-    // Notes
-    if (invoice.notes) {
-      yPosition += 20;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Notes:', 20, yPosition);
-      yPosition += 8;
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(invoice.notes, 20, yPosition);
+    pdf.setTextColor(...grayText);
+    pdf.text(`Method: ${invoice.paymentOption || '—'}`, margin + boxPadding, afterTableY + 38);
+
+    // Notes on the right side of the same box
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(0, 0, 0);
+    pdf.text('Notes', margin + boxWidth / 2, afterTableY + 20);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(...grayText);
+    const notesText = invoice.notes ? String(invoice.notes) : 'Thank you for your business!';
+    const notesMaxWidth = boxWidth / 2 - boxPadding * 2;
+    const splitNotes = pdf.splitTextToSize(notesText, notesMaxWidth);
+    pdf.text(splitNotes, margin + boxWidth / 2, afterTableY + 38);
+
+    // Footer - page number and brand tint
+    const pageCount = pdf.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i += 1) {
+      pdf.setPage(i);
+      pdf.setFontSize(9);
+      pdf.setTextColor(150);
+      pdf.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - 20, { align: 'right' });
     }
-    
-    // Set response headers
+
+    // Response headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
-    
-    // Send PDF as buffer
+
     const pdfBuffer = Buffer.from(pdf.output('arraybuffer'));
     res.send(pdfBuffer);
 
