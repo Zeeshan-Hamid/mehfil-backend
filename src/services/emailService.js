@@ -8,7 +8,7 @@ class EmailService {
 
     const title = 'Password Reset Request';
     const content = `
-      <p>You requested to reset your password. Please click the button below to proceed. This link will expire in 10 minutes.</p>
+      <p>You requested to reset your password. Please click the button below to proceed. This link will expire in 1 hour.</p>
     `;
     const button = { text: 'Reset Password', url: resetUrl };
 
@@ -22,10 +22,23 @@ class EmailService {
     };
 
     try {
-      await transporter.sendMail(message);
+      console.log(`📧 Attempting to send password reset email to ${email}`);
+      const startTime = Date.now();
+      
+      const info = await transporter.sendMail(message);
+      const endTime = Date.now();
+      
+      console.log(`✅ Password reset email sent successfully to ${email} in ${endTime - startTime}ms`);
+      console.log('Message ID:', info.messageId);
+      
       return true;
     } catch (error) {
-      console.error('Error sending password reset email:', error);
+      console.error(`❌ Error sending password reset email to ${email}:`, error);
+      console.error('Error details:', {
+        code: error.code,
+        response: error.response,
+        responseCode: error.responseCode
+      });
       throw new Error('Failed to send password reset email');
     }
   }

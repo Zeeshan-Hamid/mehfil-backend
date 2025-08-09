@@ -379,13 +379,20 @@ const forgotPassword = async (req, res) => {
 
     // Save hashed token
     user.passwordResetToken = hashedToken;
-    user.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour (60 minutes)
     await user.save({ validateBeforeSave: false });
 
-    // Send reset email
+    // Send reset email asynchronously (don't wait for email to send)
     const origin = `${req.protocol}://${req.get('host')}`;
-    await EmailService.sendPasswordResetEmail(email, resetToken, origin);
+    EmailService.sendPasswordResetEmail(email, resetToken, origin)
+      .then(() => {
+        console.log(`✅ Password reset email sent successfully to ${email}`);
+      })
+      .catch((error) => {
+        console.error(`❌ Failed to send password reset email to ${email}:`, error);
+      });
 
+    // Respond immediately to user
     res.status(200).json({
       success: true,
       message: 'If a user exists with this email, they will receive password reset instructions.'
