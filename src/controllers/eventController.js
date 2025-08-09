@@ -43,6 +43,11 @@ exports.createEvent = async (req, res, next) => {
     if (eventData.location) eventData.location = JSON.parse(eventData.location);
     if (eventData.services) eventData.services = JSON.parse(eventData.services);
     if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
+    
+    // Handle boolean fields that come as strings from form-data
+    if (eventData.flexible_price !== undefined) {
+      eventData.flexible_price = eventData.flexible_price === 'true' || eventData.flexible_price === true;
+    }
 
     // 5. Create the event
     const newEvent = await Event.create({
@@ -132,6 +137,11 @@ exports.updateEvent = catchAsync(async (req, res, next) => {
   if (eventData.location) eventData.location = JSON.parse(eventData.location);
   if (eventData.services) eventData.services = JSON.parse(eventData.services);
   if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
+  
+  // Handle boolean fields that come as strings from form-data
+  if (eventData.flexible_price !== undefined) {
+    eventData.flexible_price = eventData.flexible_price === 'true' || eventData.flexible_price === true;
+  }
   
   // Process and upload new images if they exist
   if (req.files && req.files.length > 0) {
@@ -294,7 +304,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
       .sort(sortOption)
       .skip(skip)
       .limit(limit)
-      .select('name category description imageUrls location averageRating totalReviews tags createdAt packages')
+      .select('name category description imageUrls location averageRating totalReviews tags createdAt packages flexible_price')
       .populate({
         path: 'vendor',
         select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'

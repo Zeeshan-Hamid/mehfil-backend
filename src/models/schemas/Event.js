@@ -173,6 +173,10 @@ const eventSchema = new mongoose.Schema({
   tags: {
     type: [String],
     index: true
+  },
+  flexible_price: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,
