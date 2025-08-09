@@ -68,10 +68,26 @@ const eventSchema = new mongoose.Schema({
     maxlength: [150, 'Event name cannot exceed 150 characters.']
   },
   slug: String,
-  eventType: {
+  category: {
     type: String,
-    required: [true, 'Event type is required.'],
-    enum: ['wedding', 'engagement', 'aqeeqah', 'nikah', 'walima', 'mehendi', 'birthday', 'anniversary', 'corporate', 'other'],
+    required: [true, 'Event category is required.'],
+    enum: [
+      'Drinks',
+      'Desserts', 
+      'Decor',
+      'Henna',
+      'Food',
+      'Videography',
+      'Venue Management',
+      'Entertainment',
+      'Hair',
+      'Makeup',
+      'Photography',
+      'Catering',
+      'Wedding Planner',
+      'Event Planner',
+      'Other'
+    ],
     index: true
   },
   description: {
@@ -164,8 +180,8 @@ const eventSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Compound index to ensure a vendor cannot create two events with the same name and type.
-eventSchema.index({ vendor: 1, name: 1, eventType: 1 }, { unique: true });
+// Compound index to ensure a vendor cannot create two events with the same name and category.
+eventSchema.index({ vendor: 1, name: 1, category: 1 }, { unique: true });
 
 // Text index for searching across multiple fields
 eventSchema.index(

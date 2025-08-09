@@ -84,7 +84,7 @@ const searchListings = async (req, res) => {
             { $text: { $search: q } },
             { score: { $meta: 'textScore' } }
         )
-        .select('name eventType description imageUrls location averageRating totalReviews tags')
+        .select('name category description imageUrls location averageRating totalReviews tags')
         .sort({ score: { $meta: 'textScore' }, averageRating: -1, createdAt: -1 })
         .populate({
             path: 'vendor',
@@ -114,7 +114,7 @@ const searchListings = async (req, res) => {
                 // Exclude items already found by text search
                 _id: { $nin: listings.map(l => l._id) }
             })
-            .select('name eventType description imageUrls location averageRating totalReviews tags')
+            .select('name category description imageUrls location averageRating totalReviews tags')
             .sort({ averageRating: -1, createdAt: -1 })
             .populate({
                 path: 'vendor',

@@ -27,7 +27,7 @@ exports.getFavorites = catchAsync(async (req, res) => {
   const user = await User.findById(userId).select('customerProfile.favorites')
     .populate({
       path: 'customerProfile.favorites.event',
-      select: 'name eventType description imageUrls location averageRating totalReviews',
+      select: 'name category description imageUrls location averageRating totalReviews',
       populate: {
         path: 'vendor',
         select: 'vendorProfile.businessName'

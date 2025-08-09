@@ -15,14 +15,14 @@ const catchAsync = fn => {
 exports.createEvent = async (req, res, next) => {
   try {
     const vendorId = req.user.id;
-    const { name, eventType } = req.body;
+    const { name, category } = req.body;
 
     // 1. Application-level check for better UX
-    const existingEvent = await Event.findOne({ vendor: vendorId, name, eventType });
+    const existingEvent = await Event.findOne({ vendor: vendorId, name, category });
     if (existingEvent) {
       return res.status(409).json({ // 409 Conflict
         status: 'fail',
-        message: 'You already have an event with this name and event type. Please choose a different name or type.'
+        message: 'You already have an event with this name and category. Please choose a different name or category.'
       });
     }
 
@@ -62,7 +62,7 @@ exports.createEvent = async (req, res, next) => {
     if (error.code === 11000) {
       return res.status(409).json({
         status: 'fail',
-        message: 'An event with this name and type already exists. Please choose a different name or type.'
+        message: 'An event with this name and category already exists. Please choose a different name or category.'
       });
     }
     // Pass other errors to the global handler
@@ -202,9 +202,9 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
     // 2. Build query with filters
     const queryObj = {};
 
-    // Filter by event type
-    if (req.query.eventType) {
-      queryObj.eventType = req.query.eventType;
+    // Filter by category
+    if (req.query.category) {
+      queryObj.category = req.query.category;
     }
 
     // Filter by location (city, state, or zipCode)
@@ -294,7 +294,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
       .sort(sortOption)
       .skip(skip)
       .limit(limit)
-      .select('name eventType description imageUrls location averageRating totalReviews tags createdAt packages')
+      .select('name category description imageUrls location averageRating totalReviews tags createdAt packages')
       .populate({
         path: 'vendor',
         select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'

@@ -192,17 +192,24 @@ const userSchema = new mongoose.Schema(
         default: false,
       },
       preferences: {
-        eventTypes: {
+        categories: {
           type: [String],
           enum: [
-            "wedding",
-            "engagement",
-            "aqeeqah",
-            "nikah",
-            "walima",
-            "mehendi",
-            "birthday",
-            "anniversary",
+            'Drinks',
+            'Desserts', 
+            'Decor',
+            'Henna',
+            'Food',
+            'Videography',
+            'Venue Management',
+            'Entertainment',
+            'Hair',
+            'Makeup',
+            'Photography',
+            'Catering',
+            'Wedding Planner',
+            'Event Planner',
+            'Other'
           ],
           default: [],
         },
@@ -576,7 +583,7 @@ userSchema.index({ "vendorProfile.rating.average": -1 });
 userSchema.index({ "vendorProfile.isFeatured": -1, createdAt: -1 });
 userSchema.index({ "vendorProfile.geo": "2dsphere" });
 userSchema.index({ "vendorProfile.halalCertification.status": 1 });
-userSchema.index({ "customerProfile.preferences.eventTypes": 1 });
+userSchema.index({ "customerProfile.preferences.categories": 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ "socialLogin.googleId": 1 }, { sparse: true });
 userSchema.index({ "socialLogin.facebookId": 1 }, { sparse: true });

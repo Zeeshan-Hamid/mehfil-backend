@@ -72,7 +72,7 @@ module.exports = function(passport) {
               },
               profileImage: profile.photos && profile.photos.length > 0 ? profile.photos[0].value.replace('?sz=50', '?sz=200') : null,
               preferences: {
-                eventTypes: [],
+                categories: [],
                 budgetRange: null,
                 preferredLanguages: [],
                 genderPreference: null,
