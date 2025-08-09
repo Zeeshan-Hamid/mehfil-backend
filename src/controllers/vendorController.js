@@ -56,13 +56,6 @@ exports.getCurrentVendorProfile = catchAsync(async (req, res, next) => {
     });
   }
 
-  if (vendor.role !== 'vendor') {
-    return res.status(403).json({
-      status: 'fail',
-      message: 'Access denied. Only vendors can access this resource.'
-    });
-  }
-
   res.status(200).json({
     status: 'success',
     data: {
