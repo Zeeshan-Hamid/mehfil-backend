@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema(
     // Authentication & Security (Common)
     authProvider: {
       type: String,
-      enum: ["email", "google", "facebook"],
+      enum: ["email", "google", "facebook", "vendor-created"],
       default: "email",
     },
 

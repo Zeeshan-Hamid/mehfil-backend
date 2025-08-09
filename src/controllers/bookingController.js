@@ -100,11 +100,17 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
         // Continue with booking creation even if cart removal fails
     }
 
+    // Fetch the booking with all populated data (this triggers the pre-find hook)
+    const fetchedBooking = await Booking.findById(newBooking._id);
+    
+    // Populate the booking for response with package details
+    const populatedBooking = await populatePackageDetails(fetchedBooking);
+
     res.status(201).json({
         success: true,
         message: 'Event booked successfully.',
         data: {
-            booking: newBooking
+            booking: populatedBooking
         }
     });
 });
@@ -305,4 +311,189 @@ exports.getBookedVendors = catchAsync(async (req, res, next) => {
             bookedVendors
         }
     });
-}); 
+});
+
+// @desc    Create a booking as a vendor for manual bookings
+// @route   POST /api/bookings/vendor-create
+// @access  Private (Vendor only)
+exports.createVendorBooking = catchAsync(async (req, res, next) => {
+    const { customerName, customerEmail, eventId, packageName, packageType, eventDate, attendees, totalPrice, status } = req.body;
+    const vendorId = req.user.id;
+
+    // Validation
+    if (!customerName || !customerEmail || !eventId || !packageName || !packageType || !eventDate || !attendees || totalPrice === undefined) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Please provide customerName, customerEmail, eventId, packageName, packageType, eventDate, attendees, and totalPrice.' 
+        });
+    }
+
+    if (!['regular', 'custom'].includes(packageType)) {
+        return res.status(400).json({ success: false, message: 'packageType must be either "regular" or "custom".' });
+    }
+
+    // Verify the event belongs to the vendor
+    const event = await Event.findById(eventId);
+    if (!event) {
+        return res.status(404).json({ success: false, message: 'Event not found.' });
+    }
+
+    if (!event.vendor.equals(vendorId)) {
+        return res.status(403).json({ success: false, message: 'You can only create bookings for your own events.' });
+    }
+
+    // Find or create customer
+    let customer = await User.findOne({ email: customerEmail });
+    if (!customer) {
+        // Create a basic customer account for vendor-created bookings
+        // Use 'vendor-created' authProvider to bypass normal validation requirements
+        customer = await User.create({
+            email: customerEmail,
+            password: 'VendorCreated123!', // Temporary password (meets minimum requirements)
+            role: 'customer',
+            authProvider: 'vendor-created', // Custom auth provider to bypass email validation requirements
+            emailVerified: false,
+            customerProfile: {
+                fullName: customerName,
+                profileCompleted: false
+            }
+        });
+    }
+
+    // Find the package
+    let eventPackage;
+    let packageId;
+
+    if (packageType === 'regular') {
+        eventPackage = event.packages.find(pkg => pkg.name === packageName);
+        if (!eventPackage) {
+            return res.status(404).json({ success: false, message: 'Package not found for this event.' });
+        }
+        packageId = eventPackage._id;
+    } else {
+        // For custom packages, create a new one or find existing
+        eventPackage = event.customPackages.find(pkg => pkg.name === packageName);
+        if (!eventPackage) {
+            // Create a new custom package
+            const newCustomPackage = {
+                name: packageName,
+                price: totalPrice,
+                description: `Custom package for ${customerName}`,
+                includes: ['Custom package services'], // Required field - at least one inclusion
+                createdFor: customer._id,
+                createdBy: vendorId, // Required field - the vendor creating this package
+                isActive: true
+            };
+            event.customPackages.push(newCustomPackage);
+            await event.save();
+            packageId = event.customPackages[event.customPackages.length - 1]._id;
+        } else {
+            packageId = eventPackage._id;
+        }
+    }
+
+    // Create the booking
+    const newBooking = await Booking.create({
+        customer: customer._id,
+        vendor: vendorId,
+        event: eventId,
+        package: packageId,
+        packageType,
+        eventDate,
+        attendees,
+        totalPrice,
+        status: status || 'Pending'
+    });
+
+    // Fetch the booking with all populated data (this triggers the pre-find hook)
+    const fetchedBooking = await Booking.findById(newBooking._id);
+    
+    // Populate the booking for response with package details
+    const populatedBooking = await populatePackageDetails(fetchedBooking);
+
+    res.status(201).json({
+        success: true,
+        message: 'Booking created successfully.',
+        data: {
+            booking: populatedBooking
+        }
+    });
+});
+
+// @desc    Update a booking as a vendor
+// @route   PATCH /api/bookings/vendor-update/:id
+// @access  Private (Vendor only)
+exports.updateVendorBooking = catchAsync(async (req, res, next) => {
+    const { id } = req.params;
+    const { customerName, customerEmail, eventDate, attendees, totalPrice, status } = req.body;
+    const vendorId = req.user.id;
+
+    // Find the booking
+    const booking = await Booking.findById(id);
+    if (!booking) {
+        return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    // Verify the booking belongs to the vendor
+    if (!booking.vendor.equals(vendorId)) {
+        return res.status(403).json({ success: false, message: 'You can only update your own bookings.' });
+    }
+
+    // Update customer info if provided
+    if (customerName || customerEmail) {
+        const customer = await User.findById(booking.customer);
+        if (customer) {
+            if (customerName) customer.customerProfile.fullName = customerName;
+            if (customerEmail) customer.email = customerEmail;
+            await customer.save();
+        }
+    }
+
+    // Update booking fields
+    if (eventDate) booking.eventDate = eventDate;
+    if (attendees) booking.attendees = attendees;
+    if (totalPrice !== undefined) booking.totalPrice = totalPrice;
+    if (status) booking.status = status;
+
+    await booking.save();
+
+    // Refetch the booking to ensure all data is populated after updates
+    const updatedBooking = await Booking.findById(booking._id);
+    
+    // Populate the booking for response
+    const populatedBooking = await populatePackageDetails(updatedBooking);
+
+    res.status(200).json({
+        success: true,
+        message: 'Booking updated successfully.',
+        data: {
+            booking: populatedBooking
+        }
+    });
+});
+
+// @desc    Delete a booking as a vendor
+// @route   DELETE /api/bookings/vendor-delete/:id
+// @access  Private (Vendor only)
+exports.deleteVendorBooking = catchAsync(async (req, res, next) => {
+    const { id } = req.params;
+    const vendorId = req.user.id;
+
+    // Find the booking
+    const booking = await Booking.findById(id);
+    if (!booking) {
+        return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    // Verify the booking belongs to the vendor
+    if (!booking.vendor.equals(vendorId)) {
+        return res.status(403).json({ success: false, message: 'You can only delete your own bookings.' });
+    }
+
+    await Booking.findByIdAndDelete(id);
+
+    res.status(200).json({
+        success: true,
+        message: 'Booking deleted successfully.'
+    });
+});

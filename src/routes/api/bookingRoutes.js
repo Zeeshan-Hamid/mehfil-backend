@@ -7,7 +7,10 @@ const {
   getVendorBookings,
   getBookingDetails,
   updateBookingStatus,
-  getBookedVendors
+  getBookedVendors,
+  createVendorBooking,
+  updateVendorBooking,
+  deleteVendorBooking
 } = require('../../controllers/bookingController');
 
 // --- Customer Routes ---
@@ -19,6 +22,9 @@ router.get('/booked-vendors', protect, restrictTo('customer'), getBookedVendors)
 // --- Vendor Routes ---
 // This route is protected and for vendors only
 router.get('/vendor-bookings', protect, restrictTo('vendor'), getVendorBookings);
+router.post('/vendor-create', protect, restrictTo('vendor'), createVendorBooking);
+router.patch('/vendor-update/:id', protect, restrictTo('vendor'), updateVendorBooking);
+router.delete('/vendor-delete/:id', protect, restrictTo('vendor'), deleteVendorBooking);
 router.patch('/:id/status', protect, restrictTo('vendor'), updateBookingStatus);
 
 // --- Shared Routes ---
