@@ -14,6 +14,7 @@ const catchAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next
 
 // ---------- OVERVIEW / ANALYTICS ----------
 exports.getOverview = catchAsync(async (req, res) => {
+  const period = (req.query.period || 'year').toLowerCase(); // 'week' | 'month' | '6m' | 'year'
   const [totalUsers, totalCustomers, totalVendors, activeVendors, totalEvents, totalBookings] = await Promise.all([
     User.countDocuments({}),
     User.countDocuments({ role: 'customer' }),
@@ -37,27 +38,66 @@ exports.getOverview = catchAsync(async (req, res) => {
     return acc;
   }, {});
 
-  // Monthly growth (last 12 months) for users and bookings
+  // Growth (period selectable)
   const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
-  const monthKey = (d) => `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
-  const months = Array.from({ length: 12 }).map((_, i) => {
-    const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
-    return { key: monthKey(d), label: d.toLocaleString('en-US', { month: 'short' }) };
-  });
+  let usersSeries = [];
+  let bookingsSeries = [];
 
-  const usersByMonthAgg = await User.aggregate([
-    { $match: { createdAt: { $gte: start } } },
-    { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
-  ]);
-  const bookingsByMonthAgg = await Booking.aggregate([
-    { $match: { bookingDate: { $gte: start } } },
-    { $group: { _id: { y: { $year: '$bookingDate' }, m: { $month: '$bookingDate' } }, count: { $sum: 1 } } },
-  ]);
+  if (period === 'week' || period === 'month') {
+    // Daily series for last 7 or 30 days
+    const days = period === 'week' ? 7 : 30;
+    const start = new Date();
+    start.setUTCDate(start.getUTCDate() - (days - 1));
+    start.setUTCHours(0, 0, 0, 0);
 
-  const toKey = (g) => `${g._id.y}-${g._id.m}`;
-  const usersByMonth = months.map((m) => ({ month: m.label, count: (usersByMonthAgg.find((g) => toKey(g) === m.key)?.count) || 0 }));
-  const bookingsByMonth = months.map((m) => ({ month: m.label, count: (bookingsByMonthAgg.find((g) => toKey(g) === m.key)?.count) || 0 }));
+    const dayKey = (d) => `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
+    // Aggregate by day for users
+    const usersAgg = await User.aggregate([
+      { $match: { createdAt: { $gte: start } } },
+      { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' }, d: { $dayOfMonth: '$createdAt' } }, count: { $sum: 1 } } },
+    ]);
+    const bookingsAgg = await Booking.aggregate([
+      { $match: { bookingDate: { $gte: start } } },
+      { $group: { _id: { y: { $year: '$bookingDate' }, m: { $month: '$bookingDate' }, d: { $dayOfMonth: '$bookingDate' } }, count: { $sum: 1 } } },
+    ]);
+    const usersMap = new Map(usersAgg.map((g) => [
+      `${g._id.y}-${g._id.m}-${g._id.d}`, g.count
+    ]));
+    const bookingsMap = new Map(bookingsAgg.map((g) => [
+      `${g._id.y}-${g._id.m}-${g._id.d}`, g.count
+    ]));
+
+    usersSeries = Array.from({ length: days }).map((_, i) => {
+      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + i));
+      return { label: d.toLocaleString('en-US', { month: 'short', day: 'numeric' }), count: usersMap.get(dayKey(d)) || 0 };
+    });
+    bookingsSeries = Array.from({ length: days }).map((_, i) => {
+      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + i));
+      return { label: d.toLocaleString('en-US', { month: 'short', day: 'numeric' }), count: bookingsMap.get(dayKey(d)) || 0 };
+    });
+  } else {
+    // Monthly series for last 6 or 12 months
+    const monthsWindow = period === '6m' ? 6 : 12;
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (monthsWindow - 1), 1));
+    const monthKey = (d) => `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
+    const months = Array.from({ length: monthsWindow }).map((_, i) => {
+      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+      return { key: monthKey(d), label: d.toLocaleString('en-US', { month: 'short' }) };
+    });
+
+    const usersAgg = await User.aggregate([
+      { $match: { createdAt: { $gte: start } } },
+      { $group: { _id: { y: { $year: '$createdAt' }, m: { $month: '$createdAt' } }, count: { $sum: 1 } } },
+    ]);
+    const bookingsAgg = await Booking.aggregate([
+      { $match: { bookingDate: { $gte: start } } },
+      { $group: { _id: { y: { $year: '$bookingDate' }, m: { $month: '$bookingDate' } }, count: { $sum: 1 } } },
+    ]);
+
+    const toKey = (g) => `${g._id.y}-${g._id.m}`;
+    usersSeries = months.map((m) => ({ label: m.label, count: (usersAgg.find((g) => toKey(g) === m.key)?.count) || 0 }));
+    bookingsSeries = months.map((m) => ({ label: m.label, count: (bookingsAgg.find((g) => toKey(g) === m.key)?.count) || 0 }));
+  }
 
   // Top categories by event count
   const topCategoriesAgg = await Event.aggregate([
@@ -103,7 +143,7 @@ exports.getOverview = catchAsync(async (req, res) => {
         totalBookings,
       },
       revenue: { completedRevenue, invoices: invoiceSummary },
-      growth: { usersByMonth, bookingsByMonth },
+      growth: { usersSeries, bookingsSeries, period },
       topCategories,
       bookingStatusDistribution,
       topVendors,
@@ -252,7 +292,11 @@ exports.listEvents = catchAsync(async (req, res) => {
   }
 
   const [events, total] = await Promise.all([
-    Event.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).populate('vendor', 'vendorProfile.businessName email'),
+    Event.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .populate('vendor', 'vendorProfile.businessName vendorProfile.ownerName email'),
     Event.countDocuments(query),
   ]);
 
@@ -327,7 +371,12 @@ exports.listBookings = catchAsync(async (req, res) => {
   if (customerId) query.customer = new mongoose.Types.ObjectId(customerId);
 
   const [bookings, total] = await Promise.all([
-    Booking.find(query).sort({ bookingDate: -1 }).skip(skip).limit(limitNum),
+    Booking.find(query)
+      .sort({ bookingDate: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .populate('customer', 'customerProfile.fullName email')
+      .populate('vendor', 'vendorProfile.businessName email'),
     Booking.countDocuments(query),
   ]);
 
@@ -335,7 +384,9 @@ exports.listBookings = catchAsync(async (req, res) => {
 });
 
 exports.getBooking = catchAsync(async (req, res) => {
-  const booking = await Booking.findById(req.params.id);
+  const booking = await Booking.findById(req.params.id)
+    .populate('customer', 'customerProfile.fullName email')
+    .populate('vendor', 'vendorProfile.businessName email');
   if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
   res.status(200).json({ success: true, data: { booking } });
 });
@@ -378,7 +429,11 @@ exports.listInvoices = catchAsync(async (req, res) => {
   }
 
   const [invoices, total] = await Promise.all([
-    Invoice.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+    Invoice.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .populate('vendor', 'vendorProfile.businessName vendorProfile.ownerName email'),
     Invoice.countDocuments(query),
   ]);
 
@@ -386,7 +441,7 @@ exports.listInvoices = catchAsync(async (req, res) => {
 });
 
 exports.getInvoice = catchAsync(async (req, res) => {
-  const invoice = await Invoice.findById(req.params.id);
+  const invoice = await Invoice.findById(req.params.id).populate('vendor', 'vendorProfile.businessName vendorProfile.ownerName email');
   if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found' });
   res.status(200).json({ success: true, data: { invoice } });
 });
