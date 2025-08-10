@@ -174,6 +174,15 @@ const eventSchema = new mongoose.Schema({
     type: [String],
     index: true
   },
+  // Admin featured listing flag
+  isFeatured: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  featuredAt: {
+    type: Date
+  },
   flexible_price: {
     type: Boolean,
     default: false
