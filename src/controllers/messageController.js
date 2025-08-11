@@ -155,7 +155,7 @@ exports.getConversation = catchAsync(async (req, res) => {
 exports.sendMessage = catchAsync(async (req, res) => {
     console.log('📤 [MessageController] Sending message:', req.body);
     
-    const { receiverId, eventId, content } = req.body;
+    const { receiverId, eventId, content, messageType: requestedMessageType } = req.body;
     const senderId = req.user.id;
     const socketService = req.app.get('socketService');
 
@@ -201,7 +201,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
         const conversationId = Message.generateConversationId(senderId, receiverId, eventId);
         
         let messageContent = content;
-        let messageType = 'text';
+        let messageType = requestedMessageType || 'text';
         let originalFileName = null;
 
         if (req.files && req.files.length > 0) {
@@ -285,6 +285,18 @@ exports.sendMessage = catchAsync(async (req, res) => {
             messageType,
             originalFileName
         };
+
+        // Map custom payload into customData when messageType is custom (content may be JSON)
+        if (messageType === 'custom' && messageContent) {
+            try {
+                const parsed = typeof messageContent === 'string' ? JSON.parse(messageContent) : messageContent;
+                if (parsed && typeof parsed === 'object') {
+                    messageData.customData = parsed;
+                }
+            } catch (e) {
+                // ignore JSON parse error
+            }
+        }
 
         // Add eventId only if provided (for backward compatibility)
         if (eventId) {

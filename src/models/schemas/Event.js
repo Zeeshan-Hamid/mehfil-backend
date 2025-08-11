@@ -117,6 +117,12 @@ const eventSchema = new mongoose.Schema({
         required: [true, 'Custom package price is required.'],
         min: [0, 'Custom package price cannot be negative.']
       },
+      // Number of attendees the quote is based on
+      attendees: {
+        type: Number,
+        min: [1, 'Attendees must be at least 1'],
+        default: 1
+      },
       currency: {
         type: String,
         default: 'USD',

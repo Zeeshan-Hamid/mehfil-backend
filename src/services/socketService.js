@@ -135,6 +135,18 @@ class SocketService {
         messageType
       };
 
+      // Attach structured custom data when sending custom messages
+      if (messageType === 'custom') {
+        try {
+          const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+          if (parsed && typeof parsed === 'object') {
+            messageData.customData = parsed;
+          }
+        } catch (_) {
+          // ignore JSON parse errors, content stays as-is
+        }
+      }
+
       // Add eventId only if provided (for backward compatibility)
       if (eventId) {
         messageData.eventId = eventId;
@@ -144,6 +156,13 @@ class SocketService {
 
       // Populate sender details
       await newMessage.populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
+      
+      // If message has customData, ensure content stores the same JSON so older clients can parse
+      if (messageData.customData && typeof messageData.customData === 'object') {
+        try {
+          newMessage.content = JSON.stringify(messageData.customData);
+        } catch (_) {}
+      }
 
       console.log('✅ [SocketService] Message saved to database:', newMessage._id);
 
