@@ -59,6 +59,26 @@ describe('Password Reset Flow', () => {
         }
       }
     });
+
+    it('should set reset token expiration to 1 hour', async () => {
+      const beforeRequest = Date.now();
+      
+      const res = await request(app)
+        .post('/api/auth/forgot-password')
+        .send({ email: 'test@example.com' });
+
+      expect(res.status).toBe(200);
+      
+      const updatedUser = await User.findById(user._id);
+      expect(updatedUser.passwordResetExpires).toBeDefined();
+      
+      // Check that expiration is approximately 1 hour from now (allowing 1 minute tolerance)
+      const oneHourFromNow = beforeRequest + (60 * 60 * 1000); // 1 hour in milliseconds
+      const tolerance = 60 * 1000; // 1 minute tolerance
+      
+      expect(updatedUser.passwordResetExpires.getTime()).toBeGreaterThan(oneHourFromNow - tolerance);
+      expect(updatedUser.passwordResetExpires.getTime()).toBeLessThan(oneHourFromNow + tolerance);
+    });
   });
 
   describe('GET /api/auth/reset-password/:token', () => {

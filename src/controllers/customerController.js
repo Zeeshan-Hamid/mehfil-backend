@@ -1,4 +1,12 @@
 const User = require('../models/User');
+const Booking = require('../models/Booking');
+const Message = require('../models/Message');
+const Notification = require('../models/Notification');
+const UserEvent = require('../models/UserEvent');
+const Todo = require('../models/Todo');
+const Event = require('../models/Event');
+const Review = require('../models/Review');
+const CheckoutSession = require('../models/CheckoutSession');
 const { processAndUploadProfileImage } = require('../services/fileUploadService');
 
 // A simplified error handler
@@ -153,7 +161,67 @@ exports.updateCustomerProfile = catchAsync(async (req, res, next) => {
   });
 });
 
+// @desc    Delete customer account and related data
+// @route   DELETE /api/customer/account
+// @access  Private (Customers only)
+exports.deleteCustomerAccount = catchAsync(async (req, res, next) => {
+  const customerId = req.user.id;
+
+  const customer = await User.findById(customerId);
+  if (!customer) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Customer not found'
+    });
+  }
+
+  if (customer.role !== 'customer') {
+    return res.status(403).json({
+      status: 'fail',
+      message: 'Access denied. Only customers can delete their account.'
+    });
+  }
+
+  // Perform cleanup of related data
+  try {
+    await Promise.all([
+      // Delete bookings made by the customer
+      Booking.deleteMany({ customer: customerId }),
+      // Delete messages where the user is sender or receiver
+      Message.deleteMany({ $or: [ { sender: customerId }, { receiver: customerId } ] }),
+      // Delete notifications either sent to or sent by the user
+      Notification.deleteMany({ $or: [ { recipient: customerId }, { sender: customerId } ] }),
+      // Delete personal planning data
+      UserEvent.deleteMany({ user: customerId }),
+      Todo.deleteMany({ user: customerId }),
+      // Delete standalone reviews created by the customer
+      Review.deleteMany({ customer: customerId }),
+      // Remove embedded event reviews authored by this user (legacy path)
+      Event.updateMany({}, { $pull: { reviews: { user: customerId } } }),
+      // Delete any pending/recorded checkout sessions
+      CheckoutSession.deleteMany({ user: customerId }),
+      // Remove any vendor custom packages created for this customer
+      Event.updateMany(
+        { 'customPackages.createdFor': customerId },
+        { $pull: { customPackages: { createdFor: customerId } } }
+      )
+    ]);
+  } catch (cleanupError) {
+    console.error('Error during account cleanup:', cleanupError);
+    // Continue to delete user even if some cleanup operations fail
+  }
+
+  // Finally delete the user account itself
+  await User.findByIdAndDelete(customerId);
+
+  return res.status(200).json({
+    status: 'success',
+    message: 'Your account has been permanently deleted.'
+  });
+});
+
 module.exports = {
   getCustomerProfile: exports.getCustomerProfile,
-  updateCustomerProfile: exports.updateCustomerProfile
+  updateCustomerProfile: exports.updateCustomerProfile,
+  deleteCustomerAccount: exports.deleteCustomerAccount
 }; 

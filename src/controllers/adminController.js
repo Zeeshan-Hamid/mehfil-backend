@@ -376,7 +376,8 @@ exports.listBookings = catchAsync(async (req, res) => {
       .skip(skip)
       .limit(limitNum)
       .populate('customer', 'customerProfile.fullName email')
-      .populate('vendor', 'vendorProfile.businessName email'),
+      .populate('vendor', 'vendorProfile.businessName email')
+      .select('+payment +customerSnapshot +eventSnapshot +packageSnapshot'),
     Booking.countDocuments(query),
   ]);
 

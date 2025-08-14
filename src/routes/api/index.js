@@ -22,6 +22,7 @@ const chatbotRoutes = require('./chatbotRoutes');
 const invoiceRoutes = require('./invoiceRoutes');
 const analyticsRoutes = require('./analyticsRoutes');
 const adminRoutes = require('./adminRoutes');
+const paymentRoutes = require('./paymentRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -60,5 +61,6 @@ router.use('/chatbot', chatbotRoutes);
 router.use('/invoices', invoiceRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/admin', adminRoutes);
+router.use('/payments', paymentRoutes);
 
 module.exports = router; 
