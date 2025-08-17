@@ -4,10 +4,7 @@ const User = require('../models/User');
 const Event = require('../models/Event');
 const Booking = require('../models/Booking');
 const EmailService = require('../services/emailService');
-<<<<<<< HEAD
 const taxService = require('../services/taxService');
-=======
->>>>>>> a731c7e54518da02d444b52f4774e815b6cb0bc9
 
 function getStripe() {
     const secret = process.env.STRIPE_ACCOUNT_SECRET;
@@ -21,11 +18,8 @@ function getStripe() {
 exports.createCheckoutSession = async (req, res) => {
 	try {
 		const userId = req.user.id;
-<<<<<<< HEAD
 		const { zipCode } = req.body; // Get zip code from request body
 		
-=======
->>>>>>> a731c7e54518da02d444b52f4774e815b6cb0bc9
 		const user = await User.findById(userId).populate({
 			path: 'customerProfile.customerCart.event',
 			select: 'name packages customPackages'
@@ -92,7 +86,6 @@ exports.createCheckoutSession = async (req, res) => {
 			return res.status(400).json({ success: false, message: 'Your cart has invalid items' });
 		}
 
-<<<<<<< HEAD
 		// Calculate tax if zip code is provided
 		let taxAmount = 0;
 		let totalWithTax = subtotal;
@@ -120,9 +113,6 @@ exports.createCheckoutSession = async (req, res) => {
 				}
 			}
 		}
-=======
-        // No tax line items; totals equal sum of item totals
->>>>>>> a731c7e54518da02d444b52f4774e815b6cb0bc9
 
         const stripe = getStripe();
         const session = await stripe.checkout.sessions.create({
@@ -131,7 +121,6 @@ exports.createCheckoutSession = async (req, res) => {
 			line_items: lineItems,
 			success_url: `${process.env.FRONTEND_URL}/order-confirmation?session_id={CHECKOUT_SESSION_ID}`,
 			cancel_url: `${process.env.FRONTEND_URL}/checkout`,
-<<<<<<< HEAD
 			metadata: { 
 				userId,
 				zipCode: zipCode || '',
@@ -139,16 +128,12 @@ exports.createCheckoutSession = async (req, res) => {
 				taxRate: taxInfo.taxRate.toString() || '0',
 				taxAmount: taxAmount.toString() || '0'
 			}
-=======
-			metadata: { userId }
->>>>>>> a731c7e54518da02d444b52f4774e815b6cb0bc9
 		});
 
 		const checkoutSession = await CheckoutSession.create({
 			user: userId,
 			stripeSessionId: session.id,
 			currency,
-<<<<<<< HEAD
             totalAmount: totalWithTax,
 			subtotal: subtotal,
 			taxAmount: taxAmount,
@@ -171,13 +156,6 @@ exports.createCheckoutSession = async (req, res) => {
 				}
 			} 
 		});
-=======
-            totalAmount: subtotal,
-			cartItems: cartSnapshot
-		});
-
-		return res.status(200).json({ success: true, data: { url: session.url, sessionId: session.id } });
->>>>>>> a731c7e54518da02d444b52f4774e815b6cb0bc9
 	} catch (error) {
 		console.error('Create Checkout Session Error:', error);
 		return res.status(500).json({ success: false, message: 'Failed to create checkout session' });
@@ -258,15 +236,9 @@ exports.handleStripeWebhook = async (req, res) => {
                     // Send booking confirmation email (best-effort)
                     try {
                         const currency = (process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
-<<<<<<< HEAD
                         const subtotal = checkout.subtotal || checkout.cartItems.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
                         const tax = checkout.taxAmount || 0;
                         const total = checkout.totalAmount || subtotal + tax;
-=======
-                        const subtotal = checkout.cartItems.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
-                        const tax = 0;
-                        const total = subtotal;
->>>>>>> a731c7e54518da02d444b52f4774e815b6cb0bc9
                         await EmailService.sendBookingConfirmationEmail({
                             toEmail: customer?.email,
                             customerName: customer?.customerProfile?.fullName || 'Customer',
