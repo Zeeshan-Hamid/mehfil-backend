@@ -11,7 +11,7 @@ const catchAsync = fn => {
 // @route   GET /api/notifications
 // @access  Private
 exports.getNotifications = catchAsync(async (req, res) => {
-  console.log('🔔 [NotificationController] Getting notifications for user:', req.user.id);
+
   
   const { page = 1, limit = 20, type, unreadOnly } = req.query;
   const userId = req.user.id;
@@ -39,7 +39,7 @@ exports.getNotifications = catchAsync(async (req, res) => {
     const totalCount = await Notification.countDocuments(query);
     const unreadCount = await Notification.getUnreadCount(userId);
     
-    console.log('📋 [NotificationController] Found notifications:', notifications.length);
+
     
     res.status(200).json({
       status: 'success',
@@ -55,7 +55,7 @@ exports.getNotifications = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [NotificationController] Error getting notifications:', error);
+  
     throw error;
   }
 });
@@ -64,13 +64,13 @@ exports.getNotifications = catchAsync(async (req, res) => {
 // @route   GET /api/notifications/unread-count
 // @access  Private
 exports.getUnreadCount = catchAsync(async (req, res) => {
-  console.log('🔢 [NotificationController] Getting unread count for user:', req.user.id);
+
   
   const userId = req.user.id;
   
   try {
     const count = await Notification.getUnreadCount(userId);
-    console.log('✅ [NotificationController] Unread count:', count);
+
     
     res.status(200).json({
       status: 'success',
@@ -79,7 +79,7 @@ exports.getUnreadCount = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [NotificationController] Error getting unread count:', error);
+
     throw error;
   }
 });
@@ -88,7 +88,7 @@ exports.getUnreadCount = catchAsync(async (req, res) => {
 // @route   PATCH /api/notifications/:id/read
 // @access  Private
 exports.markAsRead = catchAsync(async (req, res) => {
-  console.log('👁️ [NotificationController] Marking notification as read:', req.params.id);
+
   
   const { id } = req.params;
   const userId = req.user.id;
@@ -100,7 +100,7 @@ exports.markAsRead = catchAsync(async (req, res) => {
     });
     
     if (!notification) {
-      console.log('❌ [NotificationController] Notification not found:', id);
+
       return res.status(404).json({
         status: 'fail',
         message: 'Notification not found'
@@ -111,7 +111,7 @@ exports.markAsRead = catchAsync(async (req, res) => {
       await notification.markAsRead();
     }
     
-    console.log('✅ [NotificationController] Notification marked as read');
+    
     
     res.status(200).json({
       status: 'success',
@@ -120,7 +120,7 @@ exports.markAsRead = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [NotificationController] Error marking notification as read:', error);
+   
     throw error;
   }
 });
@@ -129,15 +129,13 @@ exports.markAsRead = catchAsync(async (req, res) => {
 // @route   PATCH /api/notifications/mark-read
 // @access  Private
 exports.markMultipleAsRead = catchAsync(async (req, res) => {
-  console.log('👁️ [NotificationController] Marking multiple notifications as read for user:', req.user.id);
-  
   const { notificationIds = [] } = req.body;
   const userId = req.user.id;
   
   try {
     const result = await Notification.markMultipleAsRead(userId, notificationIds);
     
-    console.log('✅ [NotificationController] Marked notifications as read:', result.modifiedCount);
+
     
     res.status(200).json({
       status: 'success',
@@ -146,7 +144,7 @@ exports.markMultipleAsRead = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [NotificationController] Error marking notifications as read:', error);
+
     throw error;
   }
 });
@@ -155,7 +153,7 @@ exports.markMultipleAsRead = catchAsync(async (req, res) => {
 // @route   DELETE /api/notifications/:id
 // @access  Private
 exports.deleteNotification = catchAsync(async (req, res) => {
-  console.log('🗑️ [NotificationController] Deleting notification:', req.params.id);
+  
   
   const { id } = req.params;
   const userId = req.user.id;
@@ -167,21 +165,21 @@ exports.deleteNotification = catchAsync(async (req, res) => {
     });
     
     if (!notification) {
-      console.log('❌ [NotificationController] Notification not found:', id);
+
       return res.status(404).json({
         status: 'fail',
         message: 'Notification not found'
       });
     }
     
-    console.log('✅ [NotificationController] Notification deleted');
+    
     
     res.status(200).json({
       status: 'success',
       message: 'Notification deleted successfully'
     });
   } catch (error) {
-    console.error('❌ [NotificationController] Error deleting notification:', error);
+    
     throw error;
   }
 });
@@ -190,7 +188,7 @@ exports.deleteNotification = catchAsync(async (req, res) => {
 // @route   DELETE /api/notifications/bulk-delete
 // @access  Private
 exports.bulkDeleteNotifications = catchAsync(async (req, res) => {
-  console.log('🗑️ [NotificationController] Bulk deleting notifications for user:', req.user.id);
+ 
   
   const { notificationIds, deleteRead = false } = req.body;
   const userId = req.user.id;
@@ -211,7 +209,7 @@ exports.bulkDeleteNotifications = catchAsync(async (req, res) => {
     
     const result = await Notification.deleteMany(query);
     
-    console.log('✅ [NotificationController] Deleted notifications:', result.deletedCount);
+   
     
     res.status(200).json({
       status: 'success',
@@ -220,7 +218,7 @@ exports.bulkDeleteNotifications = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [NotificationController] Error bulk deleting notifications:', error);
+ 
     throw error;
   }
 });
@@ -229,7 +227,7 @@ exports.bulkDeleteNotifications = catchAsync(async (req, res) => {
 // @route   POST /api/notifications
 // @access  Private
 exports.createNotification = catchAsync(async (req, res) => {
-  console.log('➕ [NotificationController] Creating notification');
+
   
   const { recipientId, type, title, message, data, actionUrl, priority } = req.body;
   const senderId = req.user.id;
@@ -255,12 +253,12 @@ exports.createNotification = catchAsync(async (req, res) => {
     
     await notification.populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
     
-    console.log('✅ [NotificationController] Notification created:', notification._id);
+  
     
     // Broadcast notification via socket if available
     const socketService = req.app.get('socketService');
     if (socketService) {
-      console.log('📡 [NotificationController] Broadcasting notification via SocketService');
+      
       socketService.broadcastNotification(notification);
     }
     
@@ -271,7 +269,7 @@ exports.createNotification = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [NotificationController] Error creating notification:', error);
+  
     throw error;
   }
 });

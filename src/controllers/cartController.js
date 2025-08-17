@@ -9,7 +9,7 @@ exports.getCart = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).populate({
       path: 'customerProfile.customerCart.event',
-      select: 'name imageUrls packages location' 
+      select: 'name imageUrls packages customPackages location'
     });
 
     if (!user) {
@@ -31,10 +31,11 @@ exports.getCart = async (req, res) => {
       
       let eventPackage;
       if (item.packageType === 'regular') {
-        eventPackage = item.event.packages.id(item.package);
+        eventPackage = item.event.packages?.id?.(item.package) || null;
       } else {
         // For custom packages, find the specific custom package
-        eventPackage = item.event.customPackages.find(pkg => pkg._id.toString() === item.package.toString());
+        const customPackages = item.event.customPackages || [];
+        eventPackage = customPackages.find(pkg => pkg._id.toString() === item.package.toString()) || null;
       }
       
       return {
@@ -42,8 +43,8 @@ exports.getCart = async (req, res) => {
         event: {
           _id: item.event._id,
           name: item.event.name,
-          imageUrl: item.event.imageUrls[0], // Show the primary image
-          location: item.event.location
+          imageUrl: Array.isArray(item.event.imageUrls) && item.event.imageUrls.length > 0 ? item.event.imageUrls[0] : null,
+          location: item.event.location || {}
         },
         package: eventPackage || { name: 'Package not found' },
         packageType: item.packageType,
@@ -116,13 +117,21 @@ exports.addToCart = async (req, res) => {
         return res.status(409).json({ success: false, message: 'This item is already in your cart. You can update it from the cart page.' });
     }
 
+    // Compute total price for custom packages on the server to ensure correctness
+    let computedTotalPrice = totalPrice;
+    if (packageType === 'custom') {
+      const unitPrice = Number(eventPackage.price) || 0;
+      const qty = Number(attendees) || 1;
+      computedTotalPrice = unitPrice * qty;
+    }
+
     user.customerProfile.customerCart.push({
       event: eventId,
       package: packageId,
       packageType,
       eventDate,
       attendees,
-      totalPrice
+      totalPrice: computedTotalPrice
     });
 
     await user.save();

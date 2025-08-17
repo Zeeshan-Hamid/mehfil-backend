@@ -42,6 +42,37 @@ const bookingSchema = new mongoose.Schema({
         enum: ['Pending', 'Confirmed', 'Cancelled', 'Completed'],
         default: 'Pending'
     },
+    // Stripe payment metadata
+    payment: {
+        sessionId: { type: String },
+        paymentIntentId: { type: String },
+        currency: { type: String, default: 'usd' },
+        amountPaid: { type: Number, default: 0 }
+    },
+    // Snapshots for auditing: customer, event (listing), and chosen package at time of booking
+    customerSnapshot: {
+        fullName: String,
+        email: String,
+        phoneNumber: String,
+        location: {
+            city: String,
+            state: String,
+            country: String,
+            zipCode: String
+        }
+    },
+    eventSnapshot: {
+        name: String,
+        location: Object,
+        imageUrl: String,
+        vendorBusinessName: String
+    },
+    packageSnapshot: {
+        name: String,
+        description: String,
+        price: Number,
+        includes: [String]
+    },
     bookingDate: {
         type: Date,
         default: Date.now

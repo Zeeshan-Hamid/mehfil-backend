@@ -29,7 +29,7 @@ exports.createCustomPackage = catchAsync(async (req, res, next) => {
 
   const { eventId } = req.params;
   const vendorId = req.user.id;
-  const { customerId, name, price, currency, includes, description } = req.body;
+  const { customerId, name, price, currency, includes, description, attendees } = req.body;
 
   // Validate required fields
   if (!customerId || !name || !price || !includes) {
@@ -71,6 +71,7 @@ exports.createCustomPackage = catchAsync(async (req, res, next) => {
     currency: currency || 'USD',
     includes,
     description: description || '',
+    attendees: attendees || 1,
     createdFor: customerId,
     createdBy: vendorId,
     isActive: true

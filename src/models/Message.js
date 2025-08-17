@@ -23,8 +23,13 @@ const messageSchema = new mongoose.Schema({
   },
   messageType: {
     type: String,
-    enum: ['text', 'image', 'document'],
+    enum: ['text', 'image', 'document', 'custom'],
     default: 'text'
+  },
+  // Optional structured data for custom messages (e.g., custom packages)
+  customData: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   },
   originalFileName: {
     type: String,
