@@ -260,3 +260,52 @@ exports.processAndUploadProfileImage = async (file, userId) => {
         throw new Error('Failed to process and upload profile image');
     }
 };
+
+// 6. Business Logo Upload Logic for Invoices
+exports.processAndUploadBusinessLogo = async (file, userId) => {
+    try {
+        console.log('🔄 [FileUploadService] Starting business logo processing for user:', userId);
+
+        // Create a unique filename for the optimized business logo
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const newFilename = `business-logos/${userId}-${uniqueSuffix}.webp`;
+        console.log('📄 [FileUploadService] New business logo filename:', newFilename);
+
+        // Process the image: resize and convert to WebP with optimized settings
+        // Business logos should be square and reasonably sized for invoices
+        const processedBuffer = await sharp(file.buffer)
+            .resize({ 
+                width: 300, 
+                height: 300, 
+                fit: 'inside', 
+                withoutEnlargement: true,
+                background: { r: 255, g: 255, b: 255, alpha: 0 } // Transparent background
+            }) // Square business logo, max 300x300
+            .webp({ 
+                quality: 90, // Higher quality for business logos
+                effort: 4, // Higher compression effort for smaller file size
+                nearLossless: false // Better compression
+            }) // Convert to WebP with 90% quality
+            .toBuffer();
+        console.log('✅ [FileUploadService] Business logo processed successfully');
+
+        // Upload to S3
+        await s3.upload({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: newFilename,
+            Body: processedBuffer,
+            ContentType: 'image/webp',
+            CacheControl: 'public, max-age=31536000' // Cache for 1 year
+        }).promise();
+        console.log('✅ [FileUploadService] Business logo uploaded to S3');
+
+        // Return the public URL of the uploaded file
+        const imageUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${newFilename}`;
+        console.log('🔗 [FileUploadService] Business logo URL:', imageUrl);
+
+        return imageUrl;
+    } catch (error) {
+        console.error('❌ [FileUploadService] Error processing/uploading business logo:', error);
+        throw new Error('Failed to process and upload business logo');
+    }
+};

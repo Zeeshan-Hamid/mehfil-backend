@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { protect, restrictTo } = require('../../middleware/authMiddleware');
 const {
   createInvoice,
   getInvoices,
@@ -8,32 +9,31 @@ const {
   deleteInvoice,
   markInvoiceAsPaid,
   updateOverdueInvoices,
+  updateInvoiceStatus,
   downloadInvoice
 } = require('../../controllers/invoiceController');
-const { protect } = require('../../middleware/authMiddleware');
-const { validateCreateInvoice, validateUpdateInvoice } = require('../../validators/invoiceValidators');
 
-// All routes require authentication and vendor role
-router.use(protect);
+const {
+  validateCreateInvoice,
+  validateUpdateInvoice
+} = require('../../validators/invoiceValidators');
 
-// Check if user is vendor
-const vendorOnly = (req, res, next) => {
-  if (req.user.role !== 'vendor') {
-    return res.status(403).json({
-      success: false,
-      message: 'Access denied. Only vendors can manage invoices.'
-    });
-  }
-  next();
-};
+// Import file upload middleware and business logo upload controller
+const { uploadInMemory } = require('../../services/fileUploadService');
+const { uploadBusinessLogo } = require('../../controllers/invoiceController');
 
 // Apply vendor-only middleware to all routes
-router.use(vendorOnly);
+router.use(protect, restrictTo('vendor'));
 
 // @route   POST /api/invoices
 // @desc    Create a new invoice
 // @access  Private (Vendor only)
 router.post('/', validateCreateInvoice, createInvoice);
+
+// @route   POST /api/invoices/upload-logo
+// @desc    Upload business logo for invoices
+// @access  Private (Vendor only)
+router.post('/upload-logo', uploadInMemory.single('logo'), uploadBusinessLogo);
 
 // @route   GET /api/invoices
 // @desc    Get all invoices for a vendor
@@ -63,7 +63,7 @@ router.patch('/:id/mark-paid', markInvoiceAsPaid);
 // @route   PATCH /api/invoices/:id/status
 // @desc    Update invoice status
 // @access  Private (Vendor only)
-router.patch('/:id/status', updateInvoice);
+router.patch('/:id/status', updateInvoiceStatus);
 
 // @route   PATCH /api/invoices/update-overdue
 // @desc    Update overdue invoices status

@@ -2,6 +2,7 @@ const Invoice = require('../models/Invoice');
 const { validationResult } = require('express-validator');
 const https = require('https');
 const AWS = require('aws-sdk');
+const { processAndUploadBusinessLogo } = require('../services/fileUploadService');
 // Extend jsPDF with autoTable when generating PDFs
 // Note: require side-effect is safe here; it augments jsPDF prototype
 // We will require it inside the download handler to avoid loading cost if not used elsewhere
@@ -456,18 +457,45 @@ const downloadInvoice = async (req, res) => {
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 40; // 40pt margin
 
-    // Always use the configured absolute logo URL (uploaded once to S3)
-    let logoDataUrl = null;
+    // Get both logos: vendor's business logo and Mehfil logo for watermark
+    let vendorLogoDataUrl = null;
+    let mehfilLogoDataUrl = null;
+    
     try {
-      if (MEHFIL_LOGO_URL && MEHFIL_LOGO_URL.startsWith('http')) {
-        logoDataUrl = await fetchImageAsDataUrl(MEHFIL_LOGO_URL);
-        if (!logoDataUrl) {
+      // Get vendor's business logo if available
+      if (invoice.logoUrl && invoice.logoUrl.startsWith('http')) {
+        vendorLogoDataUrl = await fetchImageAsDataUrl(invoice.logoUrl);
+        if (!vendorLogoDataUrl) {
           // Try fetching via AWS SDK (works even if the object is private)
-          logoDataUrl = await fetchS3ImageAsDataUrlFromUrl(MEHFIL_LOGO_URL);
+          vendorLogoDataUrl = await fetchS3ImageAsDataUrlFromUrl(invoice.logoUrl);
         }
       }
     } catch (_) {
-      // Fallback: no image; we'll render brand text instead
+      // Vendor logo not available
+    }
+    
+    try {
+      // Get Mehfil logo for watermark
+      if (MEHFIL_LOGO_URL && MEHFIL_LOGO_URL.startsWith('http')) {
+        console.log('🔄 [InvoiceController] Fetching Mehfil logo from:', MEHFIL_LOGO_URL);
+        mehfilLogoDataUrl = await fetchImageAsDataUrl(MEHFIL_LOGO_URL);
+        if (!mehfilLogoDataUrl) {
+          console.log('🔄 [InvoiceController] Trying AWS SDK method for Mehfil logo');
+          // Try fetching via AWS SDK (works even if the object is private)
+          mehfilLogoDataUrl = await fetchS3ImageAsDataUrlFromUrl(MEHFIL_LOGO_URL);
+        }
+        
+        if (mehfilLogoDataUrl) {
+          console.log('✅ [InvoiceController] Mehfil logo fetched successfully');
+        } else {
+          console.log('⚠️ [InvoiceController] Mehfil logo could not be fetched');
+        }
+      } else {
+        console.log('⚠️ [InvoiceController] MEHFIL_LOGO_URL not configured or invalid');
+      }
+    } catch (error) {
+      console.error('❌ [InvoiceController] Error fetching Mehfil logo:', error);
+      // Mehfil logo not available
     }
 
     // Header band
@@ -478,14 +506,14 @@ const downloadInvoice = async (req, res) => {
     // Logo on the left (preserve aspect ratio, cap height)
     const logoY = margin;
     let cursorX = margin;
-    if (logoDataUrl) {
+    if (vendorLogoDataUrl) {
       try {
         const maxLogoHeight = 36; // pt (increase size)
         const maxLogoWidth = 180; // pt (increase size)
         let drawWidth = 100;
         let drawHeight = 24;
         try {
-          const props = pdf.getImageProperties(logoDataUrl);
+          const props = pdf.getImageProperties(vendorLogoDataUrl);
           if (props && props.width && props.height) {
             const ratio = props.width / props.height;
             drawHeight = Math.min(maxLogoHeight, props.height);
@@ -496,13 +524,15 @@ const downloadInvoice = async (req, res) => {
             }
           }
         } catch (_) { /* fallback to defaults above */ }
-        pdf.addImage(logoDataUrl, 'PNG', cursorX, logoY, drawWidth, drawHeight, undefined, 'FAST');
+        pdf.addImage(vendorLogoDataUrl, 'PNG', cursorX, logoY, drawWidth, drawHeight, undefined, 'FAST');
       } catch (_) {
+        // Fallback to Mehfil text if vendor logo fails
         pdf.setFontSize(22);
         pdf.setTextColor(...brandPurple);
         pdf.text('MEHFIL', cursorX, logoY + 22);
       }
     } else {
+      // No vendor logo, use Mehfil text
       pdf.setFontSize(22);
       pdf.setTextColor(...brandPurple);
       pdf.text('MEHFIL', cursorX, logoY + 22);
@@ -526,6 +556,57 @@ const downloadInvoice = async (req, res) => {
     pdf.setDrawColor(...lightBorder);
     pdf.setLineWidth(1);
     pdf.line(rightBoxX, headerHeight + margin / 2, pageWidth - margin, headerHeight + margin / 2);
+
+    // Add Mehfil logo as watermark in background (if available)
+    if (mehfilLogoDataUrl) {
+      try {
+        // Set watermark properties: large size, moderate opacity, centered
+        const watermarkSize = 400; // Larger size for better visibility
+        const watermarkX = (pageWidth - watermarkSize) / 2;
+        const watermarkY = (pageHeight - watermarkSize) / 2;
+        
+        // Save current graphics state
+        pdf.saveGraphicsState();
+        
+        // Set transparency (opacity) for watermark effect - increased for better visibility
+        pdf.setGlobalAlpha(0.15); // Moderate opacity (15%) for better visibility
+        
+        // Add the watermark image
+        pdf.addImage(mehfilLogoDataUrl, 'PNG', watermarkX, watermarkY, watermarkSize, watermarkSize, undefined, 'FAST');
+        
+        // Restore graphics state
+        pdf.restoreGraphicsState();
+        
+        console.log('✅ [InvoiceController] Mehfil logo watermark added successfully');
+      } catch (error) {
+        console.error('❌ [InvoiceController] Failed to add Mehfil logo watermark:', error);
+        // Watermark failed, continue without it
+      }
+    } else {
+      console.log('⚠️ [InvoiceController] Mehfil logo not available for watermark');
+      
+      // Fallback: Add text-based watermark
+      try {
+        pdf.saveGraphicsState();
+        pdf.setGlobalAlpha(0.08); // Very low opacity for text watermark
+        pdf.setFontSize(120);
+        pdf.setTextColor(175, 142, 186); // Brand purple color
+        pdf.setFont('helvetica', 'bold');
+        
+        // Center the text watermark
+        const watermarkText = 'MEHFIL';
+        const textWidth = pdf.getTextWidth(watermarkText);
+        const textX = (pageWidth - textWidth) / 2;
+        const textY = pageHeight / 2;
+        
+        pdf.text(watermarkText, textX, textY);
+        pdf.restoreGraphicsState();
+        
+        console.log('✅ [InvoiceController] Text watermark added as fallback');
+      } catch (error) {
+        console.error('❌ [InvoiceController] Failed to add text watermark:', error);
+      }
+    }
 
     // Bill To box
     let cursorY = headerHeight + margin;
@@ -649,6 +730,43 @@ const downloadInvoice = async (req, res) => {
     const splitNotes = pdf.splitTextToSize(notesText, notesMaxWidth);
     pdf.text(splitNotes, margin + boxWidth / 2, afterTableY + 38);
 
+    // Mehfil Footer - Generated by information
+    const footerY = afterTableY + boxHeight + 30;
+    const footerWidth = pageWidth - margin * 2;
+    
+    // Footer separator line
+    pdf.setDrawColor(...lightBorder);
+    pdf.setLineWidth(1);
+    pdf.line(margin, footerY, pageWidth - margin, footerY);
+    
+    // Footer text
+    pdf.setFontSize(10);
+    pdf.setTextColor(102, 102, 102); // Gray color
+    pdf.setFont('helvetica', 'normal');
+    
+    // "Generated by Mehfil" text
+    const generatedByText = 'Generated by';
+    const mehfilText = 'Mehfil';
+    const generatedByWidth = pdf.getTextWidth(generatedByText);
+    const mehfilWidth = pdf.getTextWidth(mehfilText);
+    
+    const footerTextX = margin + (footerWidth - generatedByWidth - mehfilWidth - 8) / 2;
+    pdf.text(generatedByText, footerTextX, footerY + 20);
+    
+    // Mehfil in brand color
+    pdf.setTextColor(175, 142, 186); // Brand purple color
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(mehfilText, footerTextX + generatedByWidth + 8, footerY + 20);
+    
+    // Website URL
+    pdf.setFontSize(9);
+    pdf.setTextColor(102, 102, 102);
+    pdf.setFont('helvetica', 'normal');
+    const urlText = 'https://www.mefil.app';
+    const urlWidth = pdf.getTextWidth(urlText);
+    const urlX = margin + (footerWidth - urlWidth) / 2;
+    pdf.text(urlText, urlX, footerY + 35);
+
     // Footer - page number and brand tint
     const pageCount = pdf.getNumberOfPages();
     for (let i = 1; i <= pageCount; i += 1) {
@@ -675,6 +793,112 @@ const downloadInvoice = async (req, res) => {
   }
 };
 
+// @desc    Update invoice status
+// @route   PATCH /api/invoices/:id/status
+// @access  Private (Vendor only)
+const updateInvoiceStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Validate status
+    const validStatuses = ['Pending', 'Paid', 'Overdue', 'Cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be one of: Pending, Paid, Overdue, Cancelled'
+      });
+    }
+
+    // Find invoice and check ownership
+    const invoice = await Invoice.findOne({ _id: id, vendor: req.user.id });
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice not found'
+      });
+    }
+
+    // Update status
+    invoice.status = status;
+    
+    // If marking as paid, set paidAt timestamp
+    if (status === 'Paid') {
+      invoice.paidAt = new Date();
+    }
+
+    await invoice.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Invoice status updated successfully',
+      data: {
+        invoice
+      }
+    });
+
+  } catch (error) {
+    console.error('Update invoice status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error while updating invoice status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+// @desc    Upload business logo for invoices
+// @route   POST /api/invoices/upload-logo
+// @access  Private (Vendor only)
+const uploadBusinessLogo = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No logo file provided'
+      });
+    }
+
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'
+      });
+    }
+
+    // Check file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (req.file.size > maxSize) {
+      return res.status(400).json({
+        success: false,
+        message: 'File size too large. Maximum size is 5MB.'
+      });
+    }
+
+    // Upload logo to S3
+    const logoUrl = await processAndUploadBusinessLogo(req.file, req.user.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Business logo uploaded successfully',
+      data: {
+        logoUrl
+      }
+    });
+
+  } catch (error) {
+    console.error('Upload business logo error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during logo upload',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   getInvoices,
@@ -683,5 +907,7 @@ module.exports = {
   deleteInvoice,
   markInvoiceAsPaid,
   updateOverdueInvoices,
-  downloadInvoice
+  updateInvoiceStatus,
+  downloadInvoice,
+  uploadBusinessLogo
 }; 
