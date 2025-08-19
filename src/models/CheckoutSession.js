@@ -43,6 +43,17 @@ const checkoutSessionSchema = new mongoose.Schema({
 		type: String,
 		default: null
 	},
+	// Tax breakdown for multiple locations
+	taxBreakdown: [
+		{
+			zipCode: { type: String, required: true },
+			state: { type: String },
+			city: { type: String },
+			taxRate: { type: Number, required: true },
+			subtotal: { type: Number, required: true },
+			taxAmount: { type: Number, required: true }
+		}
+	],
 	paymentIntentId: {
 		type: String
 	},

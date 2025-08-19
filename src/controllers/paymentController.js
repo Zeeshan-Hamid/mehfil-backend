@@ -14,15 +14,53 @@ function getStripe() {
     return new Stripe(secret);
 }
 
+// Helper function to safely format Stripe metadata (under 500 chars)
+function formatStripeMetadata(userId, taxBreakdownData, totalTaxAmount) {
+    const metadata = {
+        userId: userId.toString(),
+        totalTaxAmount: totalTaxAmount.toString()
+    };
+    
+    if (taxBreakdownData && taxBreakdownData.length > 0) {
+        // Limit to first 3 items to stay under 500 chars
+        const limitedData = taxBreakdownData.slice(0, 3);
+        
+        // Add states (limit length)
+        const states = limitedData.map(t => t.state || 'Unknown').join(',');
+        if (states.length <= 50) {
+            metadata.taxStates = states;
+        }
+        
+        // Add tax rates (limit length)
+        const taxRates = limitedData.map(t => t.taxRate.toString()).join(',');
+        if (taxRates.length <= 30) {
+            metadata.taxRates = taxRates;
+        }
+    }
+    
+    // Ensure total metadata length is under 500 chars
+    const totalLength = JSON.stringify(metadata).length;
+    console.log(`Stripe metadata length: ${totalLength} chars`, metadata);
+    
+    if (totalLength > 450) { // Leave some buffer
+        // Remove less essential fields if needed
+        delete metadata.taxStates;
+        delete metadata.taxRates;
+        console.log(`Metadata trimmed to stay under limit. New length: ${JSON.stringify(metadata).length} chars`);
+    }
+    
+    return metadata;
+}
+
 // Create Stripe Checkout session for current cart
 exports.createCheckoutSession = async (req, res) => {
 	try {
 		const userId = req.user.id;
-		const { zipCode } = req.body; // Get zip code from request body
+		const { taxBreakdown, totalTaxAmount } = req.body; // Get tax breakdown from request body
 		
 		const user = await User.findById(userId).populate({
 			path: 'customerProfile.customerCart.event',
-			select: 'name packages customPackages'
+			select: 'name packages customPackages location'
 		});
 
 		if (!user) {
@@ -86,48 +124,108 @@ exports.createCheckoutSession = async (req, res) => {
 			return res.status(400).json({ success: false, message: 'Your cart has invalid items' });
 		}
 
-		// Calculate tax if zip code is provided
+		// Use tax breakdown from frontend if provided, otherwise calculate from listings
 		let taxAmount = 0;
 		let totalWithTax = subtotal;
 		let taxInfo = { state: null, taxRate: 0 };
+		let taxBreakdownData = [];
 
-		if (zipCode) {
-			taxInfo = taxService.getTaxInfoFromZipCode(zipCode);
-			if (!taxInfo.error) {
-				taxAmount = taxService.calculateTaxAmount(subtotal, taxInfo.taxRate);
-				totalWithTax = taxService.calculateTotalWithTax(subtotal, taxInfo.taxRate);
-				
-				// Add tax as a separate line item in Stripe
-				if (taxAmount > 0) {
-					lineItems.push({
-						price_data: {
-							currency,
-							product_data: {
-								name: 'Sales Tax',
-								description: `Sales tax for ${taxInfo.state} (${taxInfo.taxRate}%)`
-							},
-							unit_amount: Math.round(taxAmount * 100)
-						},
-						quantity: 1
-					});
+		if (taxBreakdown && taxBreakdown.length > 0) {
+			// Use the tax breakdown provided by frontend
+			taxAmount = totalTaxAmount || 0;
+			totalWithTax = subtotal + taxAmount;
+			taxBreakdownData = taxBreakdown;
+			
+			// Get the first state for backward compatibility
+			if (taxBreakdown.length > 0) {
+				taxInfo.state = taxBreakdown[0].state;
+				taxInfo.taxRate = taxBreakdown[0].taxRate;
+			}
+		} else {
+			// Fallback: calculate tax from listing zipcodes (for backward compatibility)
+			const zipcodeGroups = {};
+			
+			cart.forEach(item => {
+				if (item.event?.location?.zipCode) {
+					const zipCode = item.event.location.zipCode;
+					if (!zipcodeGroups[zipCode]) {
+						zipcodeGroups[zipCode] = {
+							items: [],
+							subtotal: 0
+						};
+					}
+					zipcodeGroups[zipCode].items.push(item);
+					zipcodeGroups[zipCode].subtotal += item.totalPrice;
 				}
+			});
+
+			// Calculate tax for each zipcode group
+			for (const [zipCode, group] of Object.entries(zipcodeGroups)) {
+				try {
+					const taxResult = taxService.getTaxInfoFromZipCode(zipCode);
+					if (!taxResult.error) {
+						const itemTaxAmount = taxService.calculateTaxAmount(group.subtotal, taxResult.taxRate);
+						taxAmount += itemTaxAmount;
+						
+						taxBreakdownData.push({
+							zipCode,
+							state: taxResult.state,
+							city: taxResult.city,
+							taxRate: taxResult.taxRate,
+							subtotal: group.subtotal,
+							taxAmount: itemTaxAmount
+						});
+					}
+				} catch (error) {
+					console.error(`Error calculating tax for zipcode ${zipCode}:`, error);
+				}
+			}
+			
+			totalWithTax = subtotal + taxAmount;
+			
+			// Get the first state for backward compatibility
+			if (taxBreakdownData.length > 0) {
+				taxInfo.state = taxBreakdownData[0].state;
+				taxInfo.taxRate = taxBreakdownData[0].taxRate;
 			}
 		}
 
+		// Add tax as a separate line item in Stripe if there's tax
+		if (taxAmount > 0) {
+			lineItems.push({
+				price_data: {
+					currency,
+					product_data: {
+						name: 'Sales Tax',
+						description: `Sales tax for multiple locations (${taxBreakdownData.map(t => `${t.state} ${t.taxRate}%`).join(', ')})`
+					},
+					unit_amount: Math.round(taxAmount * 100)
+				},
+				quantity: 1
+			});
+		}
+
         const stripe = getStripe();
+        
+        // Format metadata safely - Stripe has a 500 character limit for metadata
+        // We only include essential information: userId, totalTaxAmount, and limited tax info
+        const metadata = formatStripeMetadata(userId, taxBreakdownData, totalTaxAmount);
+        
+        // Validate metadata length before creating session
+        const metadataLength = JSON.stringify(metadata).length;
+        if (metadataLength > 500) {
+            console.error(`Metadata still too long: ${metadataLength} chars. Stripping to essential fields only.`);
+            metadata.taxStates = undefined;
+            metadata.taxRates = undefined;
+        }
+        
         const session = await stripe.checkout.sessions.create({
 			mode: 'payment',
 			payment_method_types: ['card'],
 			line_items: lineItems,
 			success_url: `${process.env.FRONTEND_URL}/order-confirmation?session_id={CHECKOUT_SESSION_ID}`,
 			cancel_url: `${process.env.FRONTEND_URL}/checkout`,
-			metadata: { 
-				userId,
-				zipCode: zipCode || '',
-				state: taxInfo.state || '',
-				taxRate: taxInfo.taxRate.toString() || '0',
-				taxAmount: taxAmount.toString() || '0'
-			}
+			metadata
 		});
 
 		const checkoutSession = await CheckoutSession.create({
@@ -139,8 +237,9 @@ exports.createCheckoutSession = async (req, res) => {
 			taxAmount: taxAmount,
 			taxRate: taxInfo.taxRate,
 			state: taxInfo.state,
-			zipCode: zipCode,
-			cartItems: cartSnapshot
+			zipCode: '', // No single zipcode anymore
+			cartItems: cartSnapshot,
+			taxBreakdown: taxBreakdownData
 		});
 
 		return res.status(200).json({ 
@@ -149,11 +248,13 @@ exports.createCheckoutSession = async (req, res) => {
 				url: session.url, 
 				sessionId: session.id,
 				taxInfo: {
-					state: taxInfo.state,
-					taxRate: taxInfo.taxRate,
+					states: taxBreakdownData.map(t => t.state),
+					taxRates: taxBreakdownData.map(t => t.taxRate),
 					taxAmount,
-					total: totalWithTax
-				}
+					total: totalWithTax,
+					breakdown: taxBreakdownData
+				},
+				metadata: formatStripeMetadata(userId, taxBreakdownData, totalTaxAmount)
 			} 
 		});
 	} catch (error) {
