@@ -9,7 +9,8 @@ const {
   deleteEvent,
   getVendorEvents,
   getAllEvents,
-  getEventsByVendorPublic
+  getEventsByVendorPublic,
+  getSimilarEvents
 } = require('../../controllers/eventController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 
@@ -28,6 +29,8 @@ router.get('/vendor/:vendorId', getEventsByVendorPublic);
 // Get a single event by its ID (public)
 router.get('/:id', getEvent);
 
+// Get similar events based on location
+router.get('/:id/similar', getSimilarEvents);
 
 // --- NESTED REVIEW ROUTES ---
 // This will forward all routes starting with /:eventId/reviews to the reviewRouter

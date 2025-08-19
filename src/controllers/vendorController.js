@@ -15,7 +15,7 @@ exports.getVendorProfile = async (req, res, next) => {
     const { id } = req.params;
 
     const vendor = await User.findOne({ _id: id, role: 'vendor' }).select(
-      'vendorProfile email phoneNumber'
+      'vendorProfile'
     );
 
     if (!vendor) {

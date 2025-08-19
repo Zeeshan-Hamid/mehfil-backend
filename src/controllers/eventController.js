@@ -420,3 +420,121 @@ exports.getVendorEvents = catchAsync(async (req, res) => {
     }
   });
 }); 
+
+// @desc    Get similar events based on location (same state, city, or zip code)
+// @route   GET /api/events/:id/similar
+// @access  Public
+exports.getSimilarEvents = catchAsync(async (req, res, next) => {
+  const { id } = req.params;
+  const limit = parseInt(req.query.limit, 10) || 5;
+
+  // Get the current event to find its location
+  const currentEvent = await Event.findById(id);
+  if (!currentEvent) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Event not found'
+    });
+  }
+
+  // Build query to find events with similar location
+  const locationQuery = {
+    _id: { $ne: id }, // Exclude current event
+    $or: [
+      { 'location.state': currentEvent.location.state },
+      { 'location.city': currentEvent.location.city },
+      { 'location.zipCode': currentEvent.location.zipCode }
+    ]
+  };
+
+  // Find similar events
+  let similarEvents = await Event.find(locationQuery)
+    .limit(limit)
+    .populate({
+      path: 'vendor',
+      select: 'vendorProfile.businessName'
+    })
+    .select('name imageUrls location averageRating totalReviews category tags');
+
+  // If no similar events found, try fallback strategies
+  if (similarEvents.length === 0) {
+    console.log('No similar events found, trying fallback strategies');
+    
+    // Strategy 1: Try events in the same category
+    let fallbackEvents = await Event.find({
+      _id: { $ne: id },
+      category: currentEvent.category
+    })
+    .limit(limit)
+    .populate({
+      path: 'vendor',
+      select: 'vendorProfile.businessName'
+    })
+    .select('name imageUrls location averageRating totalReviews category tags')
+    .sort({ averageRating: -1, totalReviews: -1 });
+
+    // Strategy 2: If still no events, get highest rated events
+    if (fallbackEvents.length === 0) {
+      fallbackEvents = await Event.find({
+        _id: { $ne: id }
+      })
+      .limit(limit)
+      .populate({
+        path: 'vendor',
+        select: 'vendorProfile.businessName'
+      })
+      .select('name imageUrls location averageRating totalReviews category tags')
+      .sort({ averageRating: -1, totalReviews: -1 });
+    }
+
+    similarEvents = fallbackEvents;
+  }
+
+  // Transform the data to match frontend expectations
+  const transformedEvents = similarEvents.map(event => ({
+    id: event._id,
+    name: event.name,
+    image: event.imageUrls && event.imageUrls.length > 0 ? event.imageUrls[0] : '/default_dp.jpg',
+    location: `${event.location.city}, ${event.location.state}`,
+    rating: event.averageRating || 0,
+    reviews: event.totalReviews || 0,
+    category: event.category,
+    tags: event.tags || []
+  }));
+
+  // Determine if we're showing fallback data and which strategy was used
+  let fallbackType = 'none';
+  if (similarEvents.length === 0) {
+    fallbackType = 'none';
+  } else {
+    // Check if any events match the original location criteria
+    const hasLocationMatch = similarEvents.some(event => 
+      event.location.state === currentEvent.location.state ||
+      event.location.city === currentEvent.location.city ||
+      event.location.zipCode === currentEvent.location.zipCode
+    );
+    
+    if (!hasLocationMatch) {
+      // Check if we're showing same category events
+      const hasCategoryMatch = similarEvents.some(event => 
+        event.category === currentEvent.category
+      );
+      
+      if (hasCategoryMatch) {
+        fallbackType = 'category';
+      } else {
+        fallbackType = 'general';
+      }
+    }
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      events: transformedEvents,
+      count: transformedEvents.length,
+      isFallback: fallbackType !== 'none',
+      fallbackType: fallbackType
+    }
+  });
+}); 
