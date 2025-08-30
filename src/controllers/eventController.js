@@ -43,6 +43,7 @@ exports.createEvent = async (req, res, next) => {
     if (eventData.location) eventData.location = JSON.parse(eventData.location);
     if (eventData.services) eventData.services = JSON.parse(eventData.services);
     if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
+    if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
     
     // Handle boolean fields that come as strings from form-data
     if (eventData.flexible_price !== undefined) {
@@ -137,6 +138,7 @@ exports.updateEvent = catchAsync(async (req, res, next) => {
   if (eventData.location) eventData.location = JSON.parse(eventData.location);
   if (eventData.services) eventData.services = JSON.parse(eventData.services);
   if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
+  if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
   
   // Handle boolean fields that come as strings from form-data
   if (eventData.flexible_price !== undefined) {

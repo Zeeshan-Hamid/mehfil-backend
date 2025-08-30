@@ -81,11 +81,23 @@ exports.createCheckoutSession = async (req, res) => {
 		for (const item of cart) {
 			if (!item.event) continue;
 			let pkg;
-			if (item.packageType === 'regular') {
+			let packageName;
+			let packageDescription;
+			
+			if (item.packageType === 'flatPrice') {
+				// For flat price items, use flat price data
+				pkg = { name: 'Flat Price' };
+				packageName = 'Flat Price';
+				packageDescription = item.event.flatPrice?.description || 'Standard pricing';
+			} else if (item.packageType === 'regular') {
 				pkg = item.event.packages?.id?.(item.package);
+				packageName = pkg?.name;
+				packageDescription = pkg?.name || 'Package';
 			} else {
 				const customPackages = item.event.customPackages || [];
 				pkg = customPackages.find(p => p._id.toString() === item.package.toString());
+				packageName = pkg?.name;
+				packageDescription = pkg?.name || 'Custom Package';
 			}
 
 			const unitAmountCents = Math.round((Number(item.totalPrice) || 0) * 100);
@@ -96,7 +108,7 @@ exports.createCheckoutSession = async (req, res) => {
 					currency,
 					product_data: {
 						name: item.event?.name || 'Event booking',
-						description: pkg?.name || 'Package'
+						description: packageDescription
 					},
 					unit_amount: unitAmountCents
 				},
@@ -104,20 +116,27 @@ exports.createCheckoutSession = async (req, res) => {
 			});
 
 			// Ensure we capture vendorId from DB
-            const eventDoc = await Event.findById(item.event._id).select('vendor name').populate({ path: 'vendor', select: 'vendorProfile.businessName' });
-			cartSnapshot.push({
+            const eventDoc = await Event.findById(item.event._id).select('vendor name flatPrice').populate({ path: 'vendor', select: 'vendorProfile.businessName' });
+			
+			const cartItem = {
 				eventId: item.event._id,
-                vendorId: eventDoc?.vendor?._id || eventDoc?.vendor,
-                eventName: eventDoc?.name,
-                vendorName: eventDoc?.vendor?.vendorProfile?.businessName,
-				packageId: item.package,
+				vendorId: eventDoc?.vendor?._id || eventDoc?.vendor,
+				eventName: eventDoc?.name,
+				vendorName: eventDoc?.vendor?.vendorProfile?.businessName,
 				packageType: item.packageType,
-                packageName: pkg?.name,
 				eventDate: item.eventDate,
 				attendees: item.attendees,
 				totalPrice: item.totalPrice,
-				display: { name: item.event?.name, description: pkg?.name }
-			});
+				display: { name: item.event?.name, description: packageDescription }
+			};
+
+			// For flat price items, don't set packageId
+			if (item.packageType !== 'flatPrice') {
+				cartItem.packageId = item.package;
+				cartItem.packageName = packageName;
+			}
+
+			cartSnapshot.push(cartItem);
 		}
 
 		if (!lineItems.length) {

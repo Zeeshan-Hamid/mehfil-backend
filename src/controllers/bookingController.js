@@ -36,12 +36,17 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
     const { eventId, packageId, packageType, eventDate, attendees, totalPrice } = req.body;
     const customerId = req.user.id;
 
-    if (!eventId || !packageId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
-        return res.status(400).json({ success: false, message: 'Please provide eventId, packageId, packageType, eventDate, attendees, and totalPrice.' });
+    if (!eventId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
+        return res.status(400).json({ success: false, message: 'Please provide eventId, packageType, eventDate, attendees, and totalPrice.' });
     }
 
-    if (!['regular', 'custom'].includes(packageType)) {
-        return res.status(400).json({ success: false, message: 'packageType must be either "regular" or "custom".' });
+    // For flat price items, packageId is not required
+    if (packageType !== 'flatPrice' && !packageId) {
+        return res.status(400).json({ success: false, message: 'packageId is required for regular and custom packages.' });
+    }
+
+    if (!['regular', 'custom', 'flatPrice'].includes(packageType)) {
+        return res.status(400).json({ success: false, message: 'packageType must be either "regular", "custom", or "flatPrice".' });
     }
 
     const event = await Event.findById(eventId);
@@ -51,7 +56,13 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
 
     let eventPackage;
     
-    if (packageType === 'regular') {
+    if (packageType === 'flatPrice') {
+        // For flat price, check if the event has an active flat price
+        if (!event.flatPrice || !event.flatPrice.isActive) {
+            return res.status(400).json({ success: false, message: 'This event does not have an active flat price.' });
+        }
+        eventPackage = { name: 'Flat Price', price: event.flatPrice.amount };
+    } else if (packageType === 'regular') {
         eventPackage = event.packages.id(packageId);
         if (!eventPackage) {
             return res.status(404).json({ success: false, message: 'Package not found for this event.' });
@@ -69,28 +80,46 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
     }
 
     // Create a new booking document
-    const newBooking = await Booking.create({
+    const bookingData = {
         customer: customerId,
         vendor: event.vendor,
         event: eventId,
-        package: packageId,
         packageType,
         eventDate,
         attendees,
         totalPrice
-    });
+    };
+
+    // For flat price items, don't set package field
+    if (packageType !== 'flatPrice') {
+        bookingData.package = packageId;
+    }
+
+    const newBooking = await Booking.create(bookingData);
 
     // Remove the event from the cart if it exists there
     try {
+        let cartPullQuery;
+        if (packageType === 'flatPrice') {
+            // For flat price items, only match event and packageType
+            cartPullQuery = { 
+                event: eventId, 
+                packageType: packageType 
+            };
+        } else {
+            // For regular and custom packages, match event, package, and packageType
+            cartPullQuery = { 
+                event: eventId, 
+                package: packageId, 
+                packageType: packageType 
+            };
+        }
+
         await User.findOneAndUpdate(
             { _id: customerId },
             { 
                 $pull: { 
-                    'customerProfile.customerCart': { 
-                        event: eventId, 
-                        package: packageId, 
-                        packageType: packageType 
-                    } 
+                    'customerProfile.customerCart': cartPullQuery
                 } 
             }
         );
@@ -328,8 +357,8 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
         });
     }
 
-    if (!['regular', 'custom'].includes(packageType)) {
-        return res.status(400).json({ success: false, message: 'packageType must be either "regular" or "custom".' });
+    if (!['regular', 'custom', 'flatPrice'].includes(packageType)) {
+        return res.status(400).json({ success: false, message: 'packageType must be either "regular", "custom", or "flatPrice".' });
     }
 
     // Verify the event belongs to the vendor
@@ -364,7 +393,14 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
     let eventPackage;
     let packageId;
 
-    if (packageType === 'regular') {
+    if (packageType === 'flatPrice') {
+        // For flat price, check if the event has an active flat price
+        if (!event.flatPrice || !event.flatPrice.isActive) {
+            return res.status(400).json({ success: false, message: 'This event does not have an active flat price.' });
+        }
+        eventPackage = { name: 'Flat Price', price: event.flatPrice.amount };
+        packageId = null; // No package ID for flat price
+    } else if (packageType === 'regular') {
         eventPackage = event.packages.find(pkg => pkg.name === packageName);
         if (!eventPackage) {
             return res.status(404).json({ success: false, message: 'Package not found for this event.' });
@@ -393,17 +429,23 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
     }
 
     // Create the booking
-    const newBooking = await Booking.create({
+    const bookingData = {
         customer: customer._id,
         vendor: vendorId,
         event: eventId,
-        package: packageId,
         packageType,
         eventDate,
         attendees,
         totalPrice,
         status: status || 'Pending'
-    });
+    };
+
+    // For flat price items, don't set package field
+    if (packageType !== 'flatPrice') {
+        bookingData.package = packageId;
+    }
+
+    const newBooking = await Booking.create(bookingData);
 
     // Fetch the booking with all populated data (this triggers the pre-find hook)
     const fetchedBooking = await Booking.findById(newBooking._id);

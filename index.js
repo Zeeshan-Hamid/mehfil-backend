@@ -54,14 +54,14 @@ const io = socketIo(server, {
 
 // Add connection logging
 io.on('connection', (socket) => {
-  console.log('🔌 [Server] New socket connection:', socket.id);
+ 
   
   socket.on('disconnect', (reason) => {
-    console.log('🔌 [Server] Socket disconnected:', socket.id, 'Reason:', reason);
+
   });
   
   socket.on('error', (error) => {
-    console.error('❌ [Server] Socket error:', error);
+
   });
 });
 

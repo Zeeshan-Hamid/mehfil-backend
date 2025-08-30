@@ -162,11 +162,14 @@ const userSchema = new mongoose.Schema(
           },
           package: {
             type: mongoose.Schema.Types.ObjectId,
-            required: true
+            required: function() {
+              // Package is not required for flat price items
+              return this.packageType !== 'flatPrice';
+            }
           },
           packageType: {
             type: String,
-            enum: ['regular', 'custom'],
+            enum: ['regular', 'custom', 'flatPrice'],
             required: true,
             default: 'regular'
           },
