@@ -762,7 +762,7 @@ const downloadInvoice = async (req, res) => {
     pdf.setFontSize(9);
     pdf.setTextColor(102, 102, 102);
     pdf.setFont('helvetica', 'normal');
-    const urlText = 'https://www.mefil.app';
+    const urlText = 'https://www.mehfil.app';
     const urlWidth = pdf.getTextWidth(urlText);
     const urlX = margin + (footerWidth - urlWidth) / 2;
     pdf.text(urlText, urlX, footerY + 35);
