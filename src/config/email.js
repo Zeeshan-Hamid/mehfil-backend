@@ -1,19 +1,19 @@
 const nodemailer = require('nodemailer');
 
-// To use Gmail, you'll need to configure your Google account to allow access from less secure apps,
-// or preferably, create an "App Password".
-// For more details, visit: https://support.google.com/accounts/answer/185833
+// Spacemail configuration
 const emailConfig = {
-  service: 'gmail',
+  host: process.env.MAIL_SERVER, // mail.spacemail.com
+  port: process.env.MAIL_PORT, // 465
+  secure: process.env.MAIL_SSL_TLS === 'True', // true for SSL/TLS
   auth: {
-    user: process.env.EMAIL_USER, // Your Gmail address (e.g., example@gmail.com)
-    pass: process.env.EMAIL_PASSWORD, // Your Gmail App Password
+    user: process.env.EMAIL_USER, // imran.khan@mehfil.app
+    pass: process.env.EMAIL_PASSWORD, // Imranmehfil2025!
   },
   // Connection pooling for better performance
   pool: true,
   maxConnections: 5,
   maxMessages: 100,
-  rateLimit: 14, // 14 emails per second (Gmail limit is 15/sec)
+  rateLimit: 14, // 14 emails per second
   // Connection timeout
   connectionTimeout: 60000, // 60 seconds
   greetingTimeout: 30000, // 30 seconds
@@ -27,7 +27,7 @@ transporter.verify(function(error, success) {
   if (error) {
     console.error('❌ Email configuration error:', error);
   } else {
-    
+    console.log('✅ Email server is ready to send messages');
   }
 });
 
