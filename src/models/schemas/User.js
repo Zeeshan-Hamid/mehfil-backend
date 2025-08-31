@@ -569,6 +569,43 @@ const userSchema = new mongoose.Schema(
         },
       },
 
+      // Profile View Analytics
+      analytics: {
+        profileViews: {
+          total: {
+            type: Number,
+            default: 0,
+            min: [0, "Total views cannot be negative"],
+          },
+          unique: {
+            type: Number,
+            default: 0,
+            min: [0, "Unique views cannot be negative"],
+          },
+          lastUpdated: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+        viewHistory: {
+          daily: {
+            type: Number,
+            default: 0,
+            min: [0, "Daily views cannot be negative"],
+          },
+          weekly: {
+            type: Number,
+            default: 0,
+            min: [0, "Weekly views cannot be negative"],
+          },
+          monthly: {
+            type: Number,
+            default: 0,
+            min: [0, "Monthly views cannot be negative"],
+          },
+        },
+      },
+
       profileCompleted: {
         type: Boolean,
         default: false,
