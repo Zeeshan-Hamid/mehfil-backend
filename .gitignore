@@ -5,6 +5,9 @@ yarn-debug.log*
 yarn-error.log*
 frontend/package-lock.json
 
+frontend/
+package-lock.json
+
 # Environment variables
 .env
 .env.local

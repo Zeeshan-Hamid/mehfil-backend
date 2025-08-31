@@ -477,21 +477,21 @@ const downloadInvoice = async (req, res) => {
     try {
       // Get Mehfil logo for watermark
       if (MEHFIL_LOGO_URL && MEHFIL_LOGO_URL.startsWith('http')) {
-        console.log('🔄 [InvoiceController] Fetching Mehfil logo from:', MEHFIL_LOGO_URL);
+        
         mehfilLogoDataUrl = await fetchImageAsDataUrl(MEHFIL_LOGO_URL);
         if (!mehfilLogoDataUrl) {
-          console.log('🔄 [InvoiceController] Trying AWS SDK method for Mehfil logo');
+          
           // Try fetching via AWS SDK (works even if the object is private)
           mehfilLogoDataUrl = await fetchS3ImageAsDataUrlFromUrl(MEHFIL_LOGO_URL);
         }
         
         if (mehfilLogoDataUrl) {
-          console.log('✅ [InvoiceController] Mehfil logo fetched successfully');
+          
         } else {
-          console.log('⚠️ [InvoiceController] Mehfil logo could not be fetched');
+          
         }
       } else {
-        console.log('⚠️ [InvoiceController] MEHFIL_LOGO_URL not configured or invalid');
+        
       }
     } catch (error) {
       console.error('❌ [InvoiceController] Error fetching Mehfil logo:', error);
@@ -577,13 +577,13 @@ const downloadInvoice = async (req, res) => {
         // Restore graphics state
         pdf.restoreGraphicsState();
         
-        console.log('✅ [InvoiceController] Mehfil logo watermark added successfully');
+        
       } catch (error) {
         console.error('❌ [InvoiceController] Failed to add Mehfil logo watermark:', error);
         // Watermark failed, continue without it
       }
     } else {
-      console.log('⚠️ [InvoiceController] Mehfil logo not available for watermark');
+      
       
       // Fallback: Add text-based watermark
       try {
@@ -602,7 +602,7 @@ const downloadInvoice = async (req, res) => {
         pdf.text(watermarkText, textX, textY);
         pdf.restoreGraphicsState();
         
-        console.log('✅ [InvoiceController] Text watermark added as fallback');
+        
       } catch (error) {
         console.error('❌ [InvoiceController] Failed to add text watermark:', error);
       }

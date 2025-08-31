@@ -162,11 +162,14 @@ const userSchema = new mongoose.Schema(
           },
           package: {
             type: mongoose.Schema.Types.ObjectId,
-            required: true
+            required: function() {
+              // Package is not required for flat price items
+              return this.packageType !== 'flatPrice';
+            }
           },
           packageType: {
             type: String,
-            enum: ['regular', 'custom'],
+            enum: ['regular', 'custom', 'flatPrice'],
             required: true,
             default: 'regular'
           },
@@ -626,15 +629,15 @@ userSchema.pre("save", function (next) {
       this.vendorProfile.businessAddress.zipCode
     ) {
       try {
-        console.log('Looking up timezone for zip:', this.vendorProfile.businessAddress.zipCode);
+        
         const zone = findZone.lookup(
           this.vendorProfile.businessAddress.zipCode
         );
         if (zone) {
           this.vendorProfile.timezone = zone;
-          console.log('Timezone set to:', zone);
+          
         } else {
-          console.log('No timezone found for zip:', this.vendorProfile.businessAddress.zipCode);
+          
         }
       } catch (e) {
         // Ignore errors if zipcode is invalid, timezone will remain null
@@ -671,10 +674,10 @@ userSchema.pre("save", function (next) {
       businessAddress.zipCode
     ) {
       this.vendorProfile.profileCompleted = true;
-      console.log('Vendor profile marked as completed');
+      
     } else {
       this.vendorProfile.profileCompleted = false;
-      console.log('Vendor profile marked as incomplete');
+      
     }
   }
 

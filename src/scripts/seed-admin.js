@@ -14,7 +14,7 @@ const User = require('../models/User');
 
     const existingAdmin = await User.findOne({ role: 'admin' });
     if (existingAdmin) {
-      console.log('Admin user already exists:', existingAdmin.email);
+      
       process.exit(0);
     }
 
@@ -27,7 +27,7 @@ const User = require('../models/User');
       isActive: true,
     });
 
-    console.log('Admin user created:', admin.email);
+    
     process.exit(0);
   } catch (err) {
     console.error('Failed to seed admin:', err);

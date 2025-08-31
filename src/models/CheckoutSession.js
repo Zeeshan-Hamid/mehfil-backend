@@ -64,8 +64,14 @@ const checkoutSessionSchema = new mongoose.Schema({
 			vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 			eventName: { type: String },
 			vendorName: { type: String },
-			packageId: { type: mongoose.Schema.Types.ObjectId, required: true },
-			packageType: { type: String, enum: ['regular', 'custom'], required: true },
+			packageId: { 
+				type: mongoose.Schema.Types.ObjectId, 
+				required: function() {
+					// Package ID is not required for flat price items
+					return this.packageType !== 'flatPrice';
+				}
+			},
+			packageType: { type: String, enum: ['regular', 'custom', 'flatPrice'], required: true },
 			packageName: { type: String },
 			eventDate: { type: Date, required: true },
 			attendees: { type: Number, required: true },

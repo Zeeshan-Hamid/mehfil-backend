@@ -9,7 +9,7 @@ exports.getCart = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).populate({
       path: 'customerProfile.customerCart.event',
-      select: 'name imageUrls packages customPackages location'
+      select: 'name imageUrls packages customPackages location flatPrice'
     });
 
     if (!user) {
@@ -30,7 +30,14 @@ exports.getCart = async (req, res) => {
       }
       
       let eventPackage;
-      if (item.packageType === 'regular') {
+      if (item.packageType === 'flatPrice') {
+        // For flat price items, create a package object from flat price data
+        eventPackage = {
+          name: 'Flat Price',
+          price: item.event.flatPrice?.amount || 0,
+          description: item.event.flatPrice?.description || 'Standard pricing'
+        };
+      } else if (item.packageType === 'regular') {
         eventPackage = item.event.packages?.id?.(item.package) || null;
       } else {
         // For custom packages, find the specific custom package
@@ -73,12 +80,17 @@ exports.getCart = async (req, res) => {
 exports.addToCart = async (req, res) => {
   const { eventId, packageId, packageType, eventDate, attendees, totalPrice } = req.body;
 
-  if (!eventId || !packageId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
-    return res.status(400).json({ success: false, message: 'Please provide eventId, packageId, packageType, eventDate, attendees, and totalPrice.' });
+  if (!eventId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
+    return res.status(400).json({ success: false, message: 'Please provide eventId, packageType, eventDate, attendees, and totalPrice.' });
   }
 
-  if (!['regular', 'custom'].includes(packageType)) {
-    return res.status(400).json({ success: false, message: 'packageType must be either "regular" or "custom".' });
+  // For flat price, packageId is not required
+  if (packageType !== 'flatPrice' && !packageId) {
+    return res.status(400).json({ success: false, message: 'packageId is required for regular and custom packages.' });
+  }
+
+  if (!['regular', 'custom', 'flatPrice'].includes(packageType)) {
+    return res.status(400).json({ success: false, message: 'packageType must be either "regular", "custom", or "flatPrice".' });
   }
 
   try {
@@ -91,7 +103,13 @@ exports.addToCart = async (req, res) => {
 
     let eventPackage;
     
-    if (packageType === 'regular') {
+    if (packageType === 'flatPrice') {
+      // For flat price, check if the event has an active flat price
+      if (!event.flatPrice || !event.flatPrice.isActive) {
+        return res.status(400).json({ success: false, message: 'This event does not have an active flat price.' });
+      }
+      eventPackage = { name: 'Flat Price', price: event.flatPrice.amount };
+    } else if (packageType === 'regular') {
       eventPackage = event.packages.id(packageId);
       if (!eventPackage) {
         return res.status(404).json({ success: false, message: 'Package not found for this event.' });
@@ -109,9 +127,23 @@ exports.addToCart = async (req, res) => {
     }
     
     // Check if the same event and package is already in the cart
-    const itemExists = user.customerProfile.customerCart.some(item => 
-      item.event.equals(eventId) && item.package.equals(packageId) && item.packageType === packageType
-    );
+    let itemExists;
+    if (packageType === 'flatPrice') {
+      // For flat price, check if the same event with flat price is already in cart
+      itemExists = user.customerProfile.customerCart.some(item => 
+        item.event.equals(eventId) && item.packageType === 'flatPrice'
+      );
+    } else if (eventPackage.pricingMode === 'flatPrice') {
+      // For flat price custom packages, check if the same custom package is already in cart
+      // Allow different flat price custom packages for the same event
+      itemExists = user.customerProfile.customerCart.some(item => 
+        item.event.equals(eventId) && item.packageType === packageType && item.package && item.package.equals(packageId)
+      );
+    } else {
+      itemExists = user.customerProfile.customerCart.some(item => 
+        item.event.equals(eventId) && item.packageType === packageType && item.package && item.package.equals(packageId)
+      );
+    }
 
     if (itemExists) {
         return res.status(409).json({ success: false, message: 'This item is already in your cart. You can update it from the cart page.' });
@@ -120,19 +152,40 @@ exports.addToCart = async (req, res) => {
     // Compute total price for custom packages on the server to ensure correctness
     let computedTotalPrice = totalPrice;
     if (packageType === 'custom') {
-      const unitPrice = Number(eventPackage.price) || 0;
-      const qty = Number(attendees) || 1;
-      computedTotalPrice = unitPrice * qty;
+      // Check if this is a flat price custom package
+      if (eventPackage.pricingMode === 'flatPrice') {
+        // For flat price custom packages, use the price as-is
+        computedTotalPrice = Number(eventPackage.price) || 0;
+      } else {
+        // For per-attendee custom packages, multiply by attendees
+        const unitPrice = Number(eventPackage.price) || 0;
+        const qty = Number(attendees) || 1;
+        computedTotalPrice = unitPrice * qty;
+      }
     }
 
-    user.customerProfile.customerCart.push({
+    const cartItem = {
       event: eventId,
-      package: packageId,
       packageType,
       eventDate,
-      attendees,
+      attendees: eventPackage.pricingMode === 'flatPrice' ? 1 : attendees,
       totalPrice: computedTotalPrice
-    });
+    };
+
+    // Set package field based on package type and pricing mode
+    if (packageType === 'flatPrice') {
+      // For regular flat price events, don't set package field
+      // (package field is not required for flat price events)
+    } else if (eventPackage.pricingMode === 'flatPrice') {
+      // For flat price custom packages, still need to set package field
+      // because it's a custom package, not a regular flat price event
+      cartItem.package = packageId;
+    } else {
+      // For regular and per-attendee custom packages, set package field
+      cartItem.package = packageId;
+    }
+
+    user.customerProfile.customerCart.push(cartItem);
 
     await user.save();
 
@@ -165,8 +218,8 @@ exports.updateCartItem = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cart item not found.' });
     }
 
-    // If packageId is being updated, validate it
-    if (packageId) {
+    // If packageId is being updated, validate it (only for non-flat price items)
+    if (packageId && cartItem.packageType !== 'flatPrice') {
       const event = await Event.findById(cartItem.event);
       if (!event.packages.id(packageId)) {
         return res.status(400).json({ success: false, message: 'Invalid package for this event.' });

@@ -104,6 +104,30 @@ const eventSchema = new mongoose.Schema({
     required: true
   },
   packages: [packageSchema],
+  flatPrice: {
+    amount: {
+      type: Number,
+      min: [0, 'Flat price cannot be negative.']
+    },
+    currency: {
+      type: String,
+      default: 'USD',
+      enum: ['USD', 'CAD', 'GBP', 'EUR']
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Flat price description cannot exceed 500 characters.']
+    },
+    features: {
+      type: [String],
+      default: []
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  },
   customPackages: [
     {
       name: {
@@ -122,6 +146,12 @@ const eventSchema = new mongoose.Schema({
         type: Number,
         min: [1, 'Attendees must be at least 1'],
         default: 1
+      },
+      // Pricing mode: perAttendee or flatPrice
+      pricingMode: {
+        type: String,
+        enum: ['perAttendee', 'flatPrice'],
+        default: 'perAttendee'
       },
       currency: {
         type: String,

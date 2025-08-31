@@ -17,7 +17,7 @@ const getOpenAIClient = () => {
 
 const vendorChatbot = async (req, res) => {
   try {
-    console.log('Chatbot request received:', { body: req.body, user: req.user?.id });
+    
     
     const { message, vendorId } = req.body;
 
@@ -28,7 +28,7 @@ const vendorChatbot = async (req, res) => {
       });
     }
 
-    console.log('Processing message:', message);
+    
 
     // Create a specialized system prompt for vendor assistance
     const systemPrompt = `You are Mehfil's AI Vendor Assistant, designed exclusively to help vendors succeed on the Mehfil event planning platform. Your role is strictly limited to Mehfil-related assistance.
@@ -65,11 +65,11 @@ const vendorChatbot = async (req, res) => {
 
 Remember: You are Mehfil's vendor assistant only. Stay focused on helping vendors succeed within the Mehfil ecosystem.`;
 
-    console.log('Initializing OpenAI client...');
+    
     const openaiClient = getOpenAIClient();
-    console.log('OpenAI client initialized successfully');
+    
 
-    console.log('Making OpenAI API call...');
+    
     const completion = await openaiClient.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -86,10 +86,8 @@ Remember: You are Mehfil's vendor assistant only. Stay focused on helping vendor
       temperature: 0.7,
     });
 
-    console.log('OpenAI API call successful');
+    
     const response = completion.choices[0]?.message?.content || 'Sorry, I could not process your request.';
-
-    console.log('Sending response:', response.substring(0, 100) + '...');
 
     res.status(200).json({
       success: true,
@@ -124,16 +122,16 @@ const customerChatbot = async (req, res) => {
     const { message } = req.body;
 
     if (!message) {
-      console.log('Customer chatbot error: Message is required');
+      
       return res.status(400).json({
         success: false,
         message: 'Message is required'
       });
     }
 
-    console.log('Initializing OpenAI client for customer chatbot...');
+    
     const openai = getOpenAIClient();
-    console.log('OpenAI client initialized successfully for customer chatbot');
+    
 
     const systemPrompt = `You are Mehfil's AI Customer Support Assistant, designed exclusively to help customers navigate and succeed on the Mehfil event planning platform. Your role is strictly limited to Mehfil-related assistance.
 
@@ -179,7 +177,7 @@ const customerChatbot = async (req, res) => {
 
 Remember: You are Mehfil's customer assistant only. Stay focused on helping customers succeed within the Mehfil ecosystem.`;
 
-    console.log('Sending request to OpenAI for customer chatbot...');
+    
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -196,10 +194,10 @@ Remember: You are Mehfil's customer assistant only. Stay focused on helping cust
       temperature: 0.7,
     });
 
-    console.log('OpenAI response received for customer chatbot');
+    
     const response = completion.choices[0]?.message?.content || 'Sorry, I could not process your request.';
 
-    console.log('Customer chatbot response:', response);
+    
 
     res.json({
       success: true,

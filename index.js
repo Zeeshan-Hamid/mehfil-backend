@@ -21,7 +21,7 @@ for (const varName of requiredEnvVars) {
 // Set default value for FRONTEND_URL if not provided
 if (!process.env.FRONTEND_URL) {
   process.env.FRONTEND_URL = 'http://localhost:3000';
-  console.log(`FRONTEND_URL not set, using default: ${process.env.FRONTEND_URL}`);
+  
 }
 
 const express = require('express');
@@ -54,14 +54,14 @@ const io = socketIo(server, {
 
 // Add connection logging
 io.on('connection', (socket) => {
-  console.log('🔌 [Server] New socket connection:', socket.id);
+ 
   
   socket.on('disconnect', (reason) => {
-    console.log('🔌 [Server] Socket disconnected:', socket.id, 'Reason:', reason);
+
   });
   
   socket.on('error', (error) => {
-    console.error('❌ [Server] Socket error:', error);
+
   });
 });
 
@@ -136,10 +136,10 @@ app.use((error, req, res, next) => {
 
 // Start server
 server.listen(PORT, () => {
-  console.log(`App server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
-  console.log(`API Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`Socket.IO initialized`);
+  
+  
+  
+  
 });
 
 module.exports = app;

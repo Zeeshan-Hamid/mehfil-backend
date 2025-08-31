@@ -18,11 +18,14 @@ const bookingSchema = new mongoose.Schema({
     },
     package: {
         type: mongoose.Schema.ObjectId,
-        required: [true, 'Booking must include a package.']
+        required: function() {
+            // Package is not required for flat price items
+            return this.packageType !== 'flatPrice';
+        }
     },
     packageType: {
         type: String,
-        enum: ['regular', 'custom'],
+        enum: ['regular', 'custom', 'flatPrice'],
         required: true
     },
     eventDate: {
