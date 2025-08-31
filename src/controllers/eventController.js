@@ -243,9 +243,9 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
         const minRating = Math.max(0, rating - 0.2);
         const maxRating = Math.min(5, rating + 0.2);
         queryObj.averageRating = { $gte: minRating, $lte: maxRating };
-        console.log(`Filtering by rating: ${rating}, range: ${minRating} to ${maxRating}`);
+        
       } else {
-        console.log(`Invalid rating value: ${req.query.rating}`);
+        
       }
     }
 
@@ -299,21 +299,21 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
     }
 
     // Log the final query for debugging
-    console.log('Final query:', JSON.stringify(queryObj));
+    
     
     // 4. Execute query with pagination
     const events = await Event.find(queryObj)
       .sort(sortOption)
       .skip(skip)
       .limit(limit)
-      .select('name category description imageUrls location averageRating totalReviews tags createdAt packages flexible_price')
+      .select('name category description imageUrls location averageRating totalReviews tags createdAt packages flatPrice flexible_price')
       .populate({
         path: 'vendor',
         select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'
       });
     
     // Log the number of events found
-    console.log(`Found ${events.length} events matching the query`);
+    
     
     // 5. Get total count for pagination
     const totalEvents = await Event.countDocuments(queryObj);
@@ -460,7 +460,7 @@ exports.getSimilarEvents = catchAsync(async (req, res, next) => {
 
   // If no similar events found, try fallback strategies
   if (similarEvents.length === 0) {
-    console.log('No similar events found, trying fallback strategies');
+    
     
     // Strategy 1: Try events in the same category
     let fallbackEvents = await Event.find({

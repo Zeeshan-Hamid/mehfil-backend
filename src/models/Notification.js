@@ -100,22 +100,22 @@ notificationSchema.methods.markAsRead = function() {
 
 // Static method to create a message notification
 notificationSchema.statics.createMessageNotification = async function(messageData) {
-  console.log('🔔 [NotificationModel] Creating message notification with data:', messageData);
+  
   
   const { sender, receiver, message } = messageData;
   
-  console.log('🔔 [NotificationModel] Extracted data:', { sender, receiver, messageId: message._id });
+  
   
   // Get sender details for notification
   const senderUser = await mongoose.model('User').findById(sender).select('role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
   
-  console.log('🔔 [NotificationModel] Sender user found:', !!senderUser);
+  
   
   const senderName = senderUser.role === 'customer' 
     ? senderUser.customerProfile?.fullName 
     : senderUser.vendorProfile?.businessName || senderUser.vendorProfile?.ownerName || 'Vendor';
 
-  console.log('🔔 [NotificationModel] Sender name:', senderName);
+  
 
   const notificationData = {
     recipient: receiver,
@@ -133,11 +133,11 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
     actionUrl: `/messages/${message.conversationId}`
   };
 
-  console.log('🔔 [NotificationModel] Creating notification with data:', notificationData);
+  
 
   const notification = await this.create(notificationData);
 
-  console.log('🔔 [NotificationModel] Notification created successfully:', notification._id);
+  
 
   return notification;
 };

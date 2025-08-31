@@ -89,7 +89,7 @@ contactUsSchema.index({ assignedTo: 1 });
 
 // Pre-save middleware for logging
 contactUsSchema.pre('save', function(next) {
-  console.log(`[ContactUs] New contact form submission from ${this.email} at ${new Date().toISOString()}`);
+  
   next();
 });
 

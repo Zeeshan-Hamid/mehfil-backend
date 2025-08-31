@@ -40,13 +40,13 @@ function formatStripeMetadata(userId, taxBreakdownData, totalTaxAmount) {
     
     // Ensure total metadata length is under 500 chars
     const totalLength = JSON.stringify(metadata).length;
-    console.log(`Stripe metadata length: ${totalLength} chars`, metadata);
+    
     
     if (totalLength > 450) { // Leave some buffer
         // Remove less essential fields if needed
         delete metadata.taxStates;
         delete metadata.taxRates;
-        console.log(`Metadata trimmed to stay under limit. New length: ${JSON.stringify(metadata).length} chars`);
+    
     }
     
     return metadata;

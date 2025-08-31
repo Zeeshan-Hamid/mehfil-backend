@@ -16,13 +16,13 @@ const catchAsync = fn => {
 // @route   GET /api/messages/conversations
 // @access  Private
 exports.getConversations = catchAsync(async (req, res) => {
-  console.log('🔍 [MessageController] Getting conversations for user:', req.user.id);
+  
   
   const userId = req.user.id;
   
   try {
     const conversations = await Message.getConversations(userId);
-    console.log('📋 [MessageController] Found conversations:', conversations.length);
+    
     
     // Populate user details for each conversation
     const populatedConversations = await Promise.all(
@@ -59,7 +59,7 @@ exports.getConversations = catchAsync(async (req, res) => {
       })
     );
     
-    console.log('✅ [MessageController] Successfully retrieved conversations');
+    
     
     res.status(200).json({
       status: 'success',
@@ -77,7 +77,7 @@ exports.getConversations = catchAsync(async (req, res) => {
 // @route   GET /api/messages/conversation/:eventId/:otherUserId
 // @access  Private
 exports.getConversation = catchAsync(async (req, res) => {
-  console.log('🔍 [MessageController] Getting conversation for event:', req.params.eventId, 'with user:', req.params.otherUserId);
+  
   
   const { eventId, otherUserId } = req.params;
   const currentUserId = req.user.id;
@@ -86,7 +86,7 @@ exports.getConversation = catchAsync(async (req, res) => {
     // Validate event exists
     const event = await Event.findById(eventId);
     if (!event) {
-      console.log('❌ [MessageController] Event not found:', eventId);
+      
       return res.status(404).json({
         status: 'fail',
         message: 'Event not found'
@@ -96,7 +96,7 @@ exports.getConversation = catchAsync(async (req, res) => {
     // Validate other user exists
     const otherUser = await User.findById(otherUserId).select('role customerProfile.fullName customerProfile.profileImage vendorProfile.businessName vendorProfile.ownerName');
     if (!otherUser) {
-      console.log('❌ [MessageController] Other user not found:', otherUserId);
+      
       return res.status(404).json({
         status: 'fail',
         message: 'User not found'
@@ -105,7 +105,7 @@ exports.getConversation = catchAsync(async (req, res) => {
     
     // Get conversation messages
     const messages = await Message.getConversation(currentUserId, otherUserId, eventId);
-    console.log('📨 [MessageController] Found messages:', messages.length);
+    
     
     // Mark messages as read
     await Message.updateMany(
@@ -126,7 +126,7 @@ exports.getConversation = catchAsync(async (req, res) => {
       profileImage = otherUser.customerProfile.profileImage;
     }
     
-    console.log('✅ [MessageController] Successfully retrieved conversation');
+    
     
     res.status(200).json({
       status: 'success',
@@ -153,7 +153,7 @@ exports.getConversation = catchAsync(async (req, res) => {
 // @route   POST /api/messages/send
 // @access  Private
 exports.sendMessage = catchAsync(async (req, res) => {
-    console.log('📤 [MessageController] Sending message:', req.body);
+    
     
     const { receiverId, eventId, content, messageType: requestedMessageType } = req.body;
     const senderId = req.user.id;
@@ -161,7 +161,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
 
     try {
         if (!receiverId) {
-            console.log('❌ [MessageController] Missing required field: receiverId');
+            
             return res.status(400).json({
                 status: 'fail',
                 message: 'Missing required field: receiverId'
@@ -169,7 +169,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
         }
 
         if (!content && !req.file && !req.files) {
-            console.log('❌ [MessageController] Missing content or image file');
+            
             return res.status(400).json({
                 status: 'fail',
                 message: 'Message must contain either text content or an image'
@@ -179,7 +179,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
         // Validate receiver exists
         const receiver = await User.findById(receiverId);
         if (!receiver) {
-            console.log('❌ [MessageController] Receiver not found:', receiverId);
+            
             return res.status(404).json({
                 status: 'fail',
                 message: 'Receiver not found'
@@ -190,7 +190,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
         if (eventId) {
             const event = await Event.findById(eventId);
             if (!event) {
-                console.log('❌ [MessageController] Event not found:', eventId);
+                
                 return res.status(404).json({
                     status: 'fail',
                     message: 'Event not found'
@@ -205,11 +205,11 @@ exports.sendMessage = catchAsync(async (req, res) => {
         let originalFileName = null;
 
         if (req.files && req.files.length > 0) {
-            console.log('📄 [MessageController] Multiple files detected:', req.files.length);
+            
             
             // Check if more than 4 images are being uploaded
             if (req.files.length > 4) {
-                console.log('❌ [MessageController] Too many files uploaded. Maximum allowed is 4.');
+                
                 return res.status(400).json({
                     status: 'error',
                     message: 'You can only upload up to 4 images at a time'
@@ -222,13 +222,13 @@ exports.sendMessage = catchAsync(async (req, res) => {
                 const allDocuments = req.files.every(file => !file.mimetype.startsWith('image/'));
                 
                 if (allImages) {
-                    console.log('🖼️ [MessageController] Multiple image files detected, starting upload process');
+                    
                     messageType = 'image';
                     const imageUrls = await processAndUploadMultipleMessageImages(req.files, senderId, conversationId);
                     messageContent = JSON.stringify(imageUrls); // Store as JSON array
-                    console.log('✅ [MessageController] Multiple images uploaded successfully:', imageUrls.length);
+                    
                 } else if (allDocuments) {
-                    console.log('📁 [MessageController] Multiple document files detected, starting upload process');
+                    
                     messageType = 'document';
                     const documentUrls = await Promise.all(
                         req.files.map(async (file) => {
@@ -237,9 +237,9 @@ exports.sendMessage = catchAsync(async (req, res) => {
                         })
                     );
                     messageContent = JSON.stringify(documentUrls); // Store as JSON array
-                    console.log('✅ [MessageController] Multiple documents uploaded successfully:', documentUrls.length);
+                    
                 } else {
-                    console.log('❌ [MessageController] Mixed file types not allowed');
+                    
                     return res.status(400).json({
                         status: 'error',
                         message: 'Cannot mix image and document files in the same message'
@@ -253,20 +253,20 @@ exports.sendMessage = catchAsync(async (req, res) => {
                 });
             }
         } else if (req.file) {
-            console.log('📄 [MessageController] Single file detected:', req.file.originalname, 'Type:', req.file.mimetype);
+            
             
             try {
                 if (req.file.mimetype.startsWith('image/')) {
-                    console.log('🖼️ [MessageController] Single image file detected, starting upload process');
+                    
                     messageType = 'image';
                     messageContent = await processAndUploadMessageImage(req.file, senderId, conversationId);
-                    console.log('✅ [MessageController] Single image uploaded successfully:', messageContent);
+                    
                 } else {
-                    console.log('📁 [MessageController] Single document file detected, starting upload process');
+                    
                     messageType = 'document';
                     originalFileName = req.file.originalname;
                     messageContent = await uploadMessageDocument(req.file, senderId, conversationId);
-                    console.log('✅ [MessageController] Single document uploaded successfully:', messageContent);
+                    
                 }
             } catch (uploadError) {
                 console.error('❌ [MessageController] Single file upload failed:', uploadError);
@@ -307,7 +307,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
 
         await newMessage.populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
         
-        console.log('✅ [MessageController] Message sent successfully:', newMessage._id);
+        
 
         // Create notification for the receiver
         try {
@@ -317,21 +317,20 @@ exports.sendMessage = catchAsync(async (req, res) => {
                 message: newMessage
             });
             
-            console.log('🔔 [MessageController] Notification created:', notification._id);
+            
             
             if (socketService) {
-                console.log('📡 [MessageController] Broadcasting message and notification via SocketService');
+                
                 socketService.broadcastMessage(newMessage);
                 socketService.broadcastNotification(notification);
                 socketService.sendUnreadCountUpdate(receiverId); // Ensure receiver gets unread count update
             } else {
-                console.log('⚠️ [MessageController] SocketService not available');
+                
             }
         } catch (notificationError) {
             console.error('❌ [MessageController] Error creating notification:', notificationError);
             // Still broadcast the message even if notification fails
             if (socketService) {
-                console.log('📡 [MessageController] Broadcasting message via SocketService (notification failed)');
                 socketService.broadcastMessage(newMessage);
             }
         }
@@ -352,7 +351,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
 // @route   PATCH /api/messages/read/:conversationId
 // @access  Private
 exports.markAsRead = catchAsync(async (req, res) => {
-  console.log('👁️ [MessageController] Marking messages as read for conversation:', req.params.conversationId);
+  
   
   const { conversationId } = req.params;
   const userId = req.user.id;
@@ -370,7 +369,7 @@ exports.markAsRead = catchAsync(async (req, res) => {
       }
     );
     
-    console.log('✅ [MessageController] Marked messages as read:', result.modifiedCount);
+    
     
     res.status(200).json({
       status: 'success',
@@ -388,13 +387,13 @@ exports.markAsRead = catchAsync(async (req, res) => {
 // @route   GET /api/messages/unread-count
 // @access  Private
 exports.getUnreadCount = catchAsync(async (req, res) => {
-  console.log('🔢 [MessageController] Getting unread count for user:', req.user.id);
+  
   
   const userId = req.user.id;
   
   try {
     const count = await Message.getUnreadCount(userId);
-    console.log('✅ [MessageController] Unread count:', count);
+    
     
     res.status(200).json({
       status: 'success',
@@ -412,7 +411,7 @@ exports.getUnreadCount = catchAsync(async (req, res) => {
 // @route   DELETE /api/messages/conversation/:conversationId
 // @access  Private
 exports.deleteConversation = catchAsync(async (req, res) => {
-  console.log('🗑️ [MessageController] Deleting conversation:', req.params.conversationId, 'for user:', req.user.id);
+  
   
   const { conversationId } = req.params;
   const userId = req.user.id;
@@ -427,7 +426,7 @@ exports.deleteConversation = catchAsync(async (req, res) => {
       ]
     });
     
-    console.log('✅ [MessageController] Deleted messages:', result.deletedCount);
+    
     
     res.status(200).json({
       status: 'success',
@@ -445,7 +444,7 @@ exports.deleteConversation = catchAsync(async (req, res) => {
 // @route   GET /api/messages/vendor/:vendorId
 // @access  Private
 exports.getVendorConversation = catchAsync(async (req, res) => {
-  console.log('🔍 [MessageController] Getting vendor conversation for vendor:', req.params.vendorId);
+  
   
   const { vendorId } = req.params;
   const currentUserId = req.user.id;
@@ -453,7 +452,7 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
   try {
     // Validate vendorId format first
     if (!vendorId || !mongoose.Types.ObjectId.isValid(vendorId)) {
-      console.log('❌ [MessageController] Invalid vendor ID format:', vendorId);
+      
       return res.status(400).json({
         status: 'fail',
         message: 'Invalid vendor ID format'
@@ -463,7 +462,7 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
     // Validate vendor exists and has the correct role
     const vendor = await User.findById(vendorId).select('role vendorProfile.businessName vendorProfile.ownerName');
     if (!vendor) {
-      console.log('❌ [MessageController] Vendor not found in database:', vendorId);
+      
       return res.status(404).json({
         status: 'fail',
         message: 'Vendor not found'
@@ -471,7 +470,7 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
     }
     
     if (vendor.role !== 'vendor') {
-      console.log('❌ [MessageController] User is not a vendor:', vendorId, 'Role:', vendor.role);
+      
       return res.status(404).json({
         status: 'fail',
         message: 'User is not a vendor'
@@ -480,7 +479,7 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
     
     // Get conversation messages (vendor-only format)
     const messages = await Message.getConversation(currentUserId, vendorId);
-    console.log('📨 [MessageController] Found messages:', messages.length);
+    
     
     // Mark messages as read
     await Message.updateMany(
@@ -498,7 +497,7 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
     // Vendors don't have profile pictures in current schema
     const profileImage = null;
     
-    console.log('✅ [MessageController] Successfully retrieved vendor conversation');
+    
     
     res.status(200).json({
       status: 'success',
@@ -523,7 +522,7 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
 // @route   GET /api/messages/customer/:customerId
 // @access  Private (Vendor only)
 exports.getCustomerConversation = catchAsync(async (req, res) => {
-  console.log('🔍 [MessageController] Getting customer conversation for customer:', req.params.customerId);
+  
   
   const { customerId } = req.params;
   const currentUserId = req.user.id;
@@ -532,7 +531,7 @@ exports.getCustomerConversation = catchAsync(async (req, res) => {
     // Ensure current user is a vendor
     const currentUser = await User.findById(currentUserId).select('role');
     if (!currentUser || currentUser.role !== 'vendor') {
-      console.log('❌ [MessageController] Current user is not a vendor:', currentUserId);
+      
       return res.status(403).json({
         status: 'fail',
         message: 'Access denied. Only vendors can access this endpoint.'
@@ -541,7 +540,7 @@ exports.getCustomerConversation = catchAsync(async (req, res) => {
 
     // Validate customerId format first
     if (!customerId || !mongoose.Types.ObjectId.isValid(customerId)) {
-      console.log('❌ [MessageController] Invalid customer ID format:', customerId);
+      
       return res.status(400).json({
         status: 'fail',
         message: 'Invalid customer ID format'
@@ -551,7 +550,7 @@ exports.getCustomerConversation = catchAsync(async (req, res) => {
     // Validate customer exists and has the correct role
     const customer = await User.findById(customerId).select('role customerProfile.fullName customerProfile.profileImage');
     if (!customer) {
-      console.log('❌ [MessageController] Customer not found in database:', customerId);
+      
       return res.status(404).json({
         status: 'fail',
         message: 'Customer not found'
@@ -559,7 +558,7 @@ exports.getCustomerConversation = catchAsync(async (req, res) => {
     }
     
     if (customer.role !== 'customer') {
-      console.log('❌ [MessageController] User is not a customer:', customerId, 'Role:', customer.role);
+      
       return res.status(404).json({
         status: 'fail',
         message: 'User is not a customer'
@@ -568,7 +567,7 @@ exports.getCustomerConversation = catchAsync(async (req, res) => {
     
     // Get conversation messages (vendor-to-customer format)
     const messages = await Message.getConversation(currentUserId, customerId);
-    console.log('📨 [MessageController] Found messages:', messages.length);
+    
     
     // Mark messages as read
     await Message.updateMany(
@@ -585,7 +584,7 @@ exports.getCustomerConversation = catchAsync(async (req, res) => {
     
     const profileImage = customer.customerProfile?.profileImage || null;
     
-    console.log('✅ [MessageController] Successfully retrieved customer conversation');
+    
     
     res.status(200).json({
       status: 'success',

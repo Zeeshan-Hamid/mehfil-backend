@@ -11,7 +11,7 @@ const catchAsync = fn => {
 // Helper function for logging
 const logContactActivity = (action, details) => {
   const timestamp = new Date().toISOString();
-  console.log(`[ContactUs] ${timestamp} - ${action}:`, details);
+  
 };
 
 // @desc    Submit contact form

@@ -208,9 +208,9 @@ class SocketService {
               message,
               conversationId
           });
-          console.log('📨 [SocketService] Sent confirmation to sender:', senderId);
+          
       } else {
-          console.log('⚠️ [SocketService] Sender not online:', senderId);
+          
       }
 
       const receiverSocketId = this.userSockets.get(receiverId);
@@ -219,9 +219,9 @@ class SocketService {
               message,
               conversationId
           });
-          console.log('📨 [SocketService] Sent new message to receiver:', receiverId);
+          
       } else {
-          console.log('⚠️ [SocketService] Receiver not online:', receiverId);
+          
       }
       
 
@@ -414,7 +414,7 @@ class SocketService {
       const sent = this.sendToUser(userId, 'unread_count_update', { unreadCount });
       
       if (sent) {
-        console.log('📊 [SocketService] Sent unread count update to user:', userId, 'Count:', unreadCount);
+        
       }
       
       return sent;

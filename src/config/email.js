@@ -27,7 +27,7 @@ transporter.verify(function(error, success) {
   if (error) {
     console.error('❌ Email configuration error:', error);
   } else {
-    console.log('✅ Email server is ready to take our messages');
+    
   }
 });
 

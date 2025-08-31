@@ -108,7 +108,7 @@ class EmailService {
 
     try {
       const info = await transporter.sendMail(message);
-      console.log('✅ Booking confirmation email sent:', info.messageId);
+      
       return true;
     } catch (error) {
       console.error('❌ Error sending booking confirmation email:', error);
@@ -137,14 +137,14 @@ class EmailService {
     };
 
     try {
-      console.log(`📧 Attempting to send password reset email to ${email}`);
+      
       const startTime = Date.now();
       
       const info = await transporter.sendMail(message);
       const endTime = Date.now();
       
-      console.log(`✅ Password reset email sent successfully to ${email} in ${endTime - startTime}ms`);
-      console.log('Message ID:', info.messageId);
+      
+      
       
       return true;
     } catch (error) {

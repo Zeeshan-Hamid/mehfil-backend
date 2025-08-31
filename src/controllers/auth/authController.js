@@ -386,7 +386,7 @@ const forgotPassword = async (req, res) => {
     const origin = `${req.protocol}://${req.get('host')}`;
     EmailService.sendPasswordResetEmail(email, resetToken, origin)
       .then(() => {
-        console.log(`✅ Password reset email sent successfully to ${email}`);
+        
       })
       .catch((error) => {
         console.error(`❌ Failed to send password reset email to ${email}:`, error);

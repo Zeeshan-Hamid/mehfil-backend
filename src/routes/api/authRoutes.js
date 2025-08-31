@@ -118,8 +118,8 @@ router.get('/google/test', (req, res) => {
 // @desc    Initiate Google login for customers
 // @access  Public
 router.get('/google/customer', (req, res, next) => {
-  console.log('Google OAuth customer route hit');
-  console.log('Current redirect URI:', process.env.GOOGLE_REDIRECT_URI);
+  
+  
   
   // Add state parameter to the request
   req.query.state = 'customer';
@@ -133,8 +133,8 @@ router.get('/google/customer', (req, res, next) => {
 // @desc    Initiate Google login for vendors
 // @access  Public
 router.get('/google/vendor', (req, res, next) => {
-  console.log('Google OAuth vendor route hit');
-  console.log('Current redirect URI:', process.env.GOOGLE_REDIRECT_URI);
+  
+  
   
   // Add state parameter to the request
   req.query.state = 'vendor';
@@ -388,7 +388,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
 
     // Update vendor profile if user is a vendor
     if (user.role === 'vendor' && updateData.businessName) {
-      console.log('Updating vendor profile with data:', updateData);
+      
       
       user.vendorProfile = {
         ...user.vendorProfile,
@@ -397,7 +397,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
         businessAddress: updateData.businessAddress
       };
       
-      console.log('Updated vendor profile:', user.vendorProfile);
+      
     }
 
     // Update phone number if provided
