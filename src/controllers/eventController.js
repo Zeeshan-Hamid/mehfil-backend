@@ -403,7 +403,8 @@ exports.getVendorEvents = catchAsync(async (req, res) => {
     .sort({ createdAt: -1 }) // Sort by newest first
     .skip(skip)
     .limit(limit)
-    .populate('vendor', 'vendorProfile.businessName vendorProfile.ownerName');
+    .populate('vendor', 'vendorProfile.businessName vendorProfile.ownerName')
+    .select('name category description imageUrls location packages flatPrice services tags createdAt averageRating totalReviews');
 
   // Get total count for pagination
   const totalEvents = await Event.countDocuments(query);
