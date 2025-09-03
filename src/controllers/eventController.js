@@ -80,29 +80,41 @@ exports.createEvent = async (req, res, next) => {
 // @route   GET /api/events/:id
 // @access  Public
 exports.getEvent = catchAsync(async (req, res, next) => {
-  const event = await Event.findById(req.params.id)
-    .populate({
-      path: 'reviews.user',
-      select: 'customerProfile.fullName customerProfile.profileImage'
-    })
-    .populate({
-      path: 'vendor',
-      select: 'vendorProfile email phoneNumber'
-    });
+  const { id } = req.params;
+  
 
-  if (!event) {
-    return res.status(404).json({
-      status: 'fail',
-      message: 'No event found with that ID'
-    });
-  }
+  
+  try {
+    const event = await Event.findById(id)
+      .populate({
+        path: 'reviews.user',
+        select: 'customerProfile.fullName customerProfile.profileImage'
+      })
+      .populate({
+        path: 'vendor',
+        select: 'vendorProfile email phoneNumber'
+      });
 
-  res.status(200).json({
-    status: 'success',
-    data: {
-      event
+    if (!event) {
+      
+      return res.status(404).json({
+        status: 'fail',
+        message: 'No event found with that ID'
+      });
     }
-  });
+
+   
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        event
+      }
+    });
+  } catch (error) {
+    
+    throw error; // Let catchAsync handle it
+  }
 });
 
 // @desc    Update an event
@@ -201,6 +213,8 @@ exports.deleteEvent = catchAsync(async (req, res, next) => {
 // @access  Public
 exports.getAllEvents = catchAsync(async (req, res, next) => {
   try {
+   
+    
     // Helper function to escape special regex characters
     function escapeRegExp(string) {
       return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
@@ -211,27 +225,33 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
     const limit = parseInt(req.query.limit, 10) || 12; // Default 12 for grid layout
     const skip = (page - 1) * limit;
 
+    
+
     // 2. Build query with filters
     const queryObj = {};
 
     // Filter by category
     if (req.query.category) {
       queryObj.category = req.query.category;
+    
     }
 
     // Filter by location (city, state, or zipCode)
     if (req.query.city) {
       // Create a case-insensitive query that allows partial matches for city
       queryObj['location.city'] = { $regex: escapeRegExp(req.query.city), $options: 'i' };
+     
     }
 
     if (req.query.state) {
       // Create a case-insensitive query that allows partial matches for state
       queryObj['location.state'] = { $regex: escapeRegExp(req.query.state), $options: 'i' };
+    
     }
 
     if (req.query.zipCode) {
       queryObj['location.zipCode'] = req.query.zipCode;
+      
     }
 
     // Filter by event rating (using the averageRating field)
@@ -245,7 +265,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
         queryObj.averageRating = { $gte: minRating, $lte: maxRating };
         
       } else {
-        
+       
       }
     }
 
@@ -254,6 +274,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
       const minPrice = parseFloat(req.query.minPrice);
       if (!isNaN(minPrice) && minPrice >= 0) {
         queryObj['packages.price'] = { $gte: minPrice };
+       
       }
     }
 
@@ -264,6 +285,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
           queryObj['packages.price'] = {};
         }
         queryObj['packages.price'].$lte = maxPrice;
+       
       }
     }
 
@@ -271,6 +293,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
     if (req.query.tags) {
       const tags = req.query.tags.split(',').map(tag => tag.trim());
       queryObj.tags = { $in: tags };
+ 
     }
 
     // 3. Determine sort order
@@ -296,10 +319,11 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
         default:
           sortOption = { createdAt: -1 }; // Default to newest
       }
+     
     }
 
     // Log the final query for debugging
-    
+   
     
     // 4. Execute query with pagination
     const events = await Event.find(queryObj)
@@ -312,14 +336,14 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
         select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'
       });
     
-    // Log the number of events found
-    
+  
     
     // 5. Get total count for pagination
     const totalEvents = await Event.countDocuments(queryObj);
+ 
 
     // 6. Send response
-    res.status(200).json({
+    const response = {
       status: 'success',
       results: events.length,
       data: {
@@ -337,8 +361,13 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
           ...queryObj
         }
       }
-    });
+    };
+
+   
+    res.status(200).json(response);
   } catch (error) {
+    
+    
     return res.status(500).json({
       status: 'error',
       message: 'Error fetching marketplace events',

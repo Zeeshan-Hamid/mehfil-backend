@@ -39,6 +39,9 @@ const apiRoutes = require('./src/routes/api');
 // Import Socket.IO service
 const SocketService = require('./src/services/socketService');
 
+// Import Cron service
+const cronService = require('./src/services/cronService');
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
@@ -100,6 +103,9 @@ app.use((req, res, next) => {
 // Initialize Socket.IO service
 const socketService = new SocketService(io);
 app.set('socketService', socketService);
+
+// Initialize Cron service
+cronService.init();
 
 
 // API Routes
