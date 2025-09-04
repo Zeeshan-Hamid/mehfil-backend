@@ -67,7 +67,12 @@ const eventSchema = new mongoose.Schema({
     trim: true,
     maxlength: [150, 'Event name cannot exceed 150 characters.']
   },
-  slug: String,
+  slug: {
+    type: String,
+    unique: true,
+    sparse: true, // Allow null values but enforce uniqueness for non-null values
+    index: true
+  },
   category: {
     type: String,
     required: [true, 'Event category is required.'],
@@ -238,13 +243,62 @@ eventSchema.index(
   { name: 'EventTextIndex', weights: { name: 10, tags: 5, 'location.city': 2, 'location.state': 2 } }
 );
 
-// Mongoose Middleware to create a slug from the name before saving
-eventSchema.pre('save', function(next) {
-  if (this.isModified('name')) {
-    this.slug = slugify(this.name, { lower: true, strict: true });
+// Mongoose Middleware to create a slug from the name, location, and vendor before saving
+eventSchema.pre('save', async function(next) {
+  try {
+    // Only generate slug if name, location, or vendor is modified, or if slug doesn't exist
+    if (this.isModified('name') || this.isModified('location') || this.isModified('vendor') || !this.slug) {
+      await this.generateUniqueSlug();
+    }
+    next();
+  } catch (error) {
+    next(error);
   }
-  next();
 });
+
+// Method to generate unique slug
+eventSchema.methods.generateUniqueSlug = async function() {
+  const Event = this.constructor;
+  
+  // Use the event name as the primary component
+  const eventName = this.name || '';
+  
+  // Get location info
+  const city = this.location?.city || '';
+  const state = this.location?.state || '';
+  
+  // Create base slug: event-name-city-state
+  let baseSlug = '';
+  if (eventName) {
+    baseSlug += slugify(eventName, { lower: true, strict: true });
+  }
+  if (city) {
+    baseSlug += baseSlug ? '-' + slugify(city, { lower: true, strict: true }) : slugify(city, { lower: true, strict: true });
+  }
+  if (state) {
+    baseSlug += baseSlug ? '-' + slugify(state, { lower: true, strict: true }) : slugify(state, { lower: true, strict: true });
+  }
+  
+  // If we still don't have a base slug, use a fallback
+  if (!baseSlug) {
+    baseSlug = 'event';
+  }
+  
+  // Add part of ObjectId for uniqueness (last 8 characters)
+  const idSuffix = this._id ? this._id.toString().slice(-8) : '';
+  let candidateSlug = baseSlug + (idSuffix ? '-' + idSuffix : '');
+  
+  // Check for uniqueness and modify if needed
+  let counter = 1;
+  let finalSlug = candidateSlug;
+  
+  while (await Event.findOne({ slug: finalSlug, _id: { $ne: this._id } })) {
+    finalSlug = candidateSlug + '-' + counter;
+    counter++;
+  }
+  
+  this.slug = finalSlug;
+};
 
 // Mongoose Middleware to update average rating when a review is added/changed
 // Note: This is a simplified calculation. A more complex app might handle this in a service layer.

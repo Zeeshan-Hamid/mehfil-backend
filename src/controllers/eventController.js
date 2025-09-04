@@ -1,4 +1,5 @@
 const Event = require('../models/Event');
+const mongoose = require('mongoose');
 const { processAndUploadImages } = require('../services/fileUploadService');
 
 // A simplified error handler
@@ -76,34 +77,48 @@ exports.createEvent = async (req, res, next) => {
   }
 };
 
-// @desc    Get a single event
-// @route   GET /api/events/:id
+// @desc    Get a single event by ID or slug
+// @route   GET /api/events/:idOrSlug
 // @access  Public
 exports.getEvent = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
-  
-
+  const { id: idOrSlug } = req.params;
   
   try {
-    const event = await Event.findById(id)
-      .populate({
-        path: 'reviews.user',
-        select: 'customerProfile.fullName customerProfile.profileImage'
-      })
-      .populate({
-        path: 'vendor',
-        select: 'vendorProfile email phoneNumber'
-      });
-
-    if (!event) {
-      
-      return res.status(404).json({
-        status: 'fail',
-        message: 'No event found with that ID'
-      });
+    let event = null;
+    
+    // Check if the parameter is a valid ObjectId format
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(idOrSlug) && /^[0-9a-fA-F]{24}$/.test(idOrSlug);
+    
+    if (isValidObjectId) {
+      // If it's a valid ObjectId, search by ID first
+      event = await Event.findById(idOrSlug)
+        .populate({
+          path: 'reviews.user',
+          select: 'customerProfile.fullName customerProfile.profileImage'
+        })
+        .populate({
+          path: 'vendor',
+          select: 'vendorProfile email phoneNumber'
+        });
+    } else {
+      // If it's not a valid ObjectId, treat it as a slug
+      event = await Event.findOne({ slug: idOrSlug })
+        .populate({
+          path: 'reviews.user',
+          select: 'customerProfile.fullName customerProfile.profileImage'
+        })
+        .populate({
+          path: 'vendor',
+          select: 'vendorProfile email phoneNumber'
+        });
     }
 
-   
+    if (!event) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'No event found with that ID or slug'
+      });
+    }
 
     res.status(200).json({
       status: 'success',
@@ -112,7 +127,6 @@ exports.getEvent = catchAsync(async (req, res, next) => {
       }
     });
   } catch (error) {
-    
     throw error; // Let catchAsync handle it
   }
 });
@@ -330,7 +344,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
       .sort(sortOption)
       .skip(skip)
       .limit(limit)
-      .select('name category description imageUrls location averageRating totalReviews tags createdAt packages flatPrice flexible_price')
+      .select('name slug category description imageUrls location averageRating totalReviews tags createdAt packages flatPrice flexible_price')
       .populate({
         path: 'vendor',
         select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'
@@ -454,14 +468,26 @@ exports.getVendorEvents = catchAsync(async (req, res) => {
 }); 
 
 // @desc    Get similar events based on location (same state, city, or zip code)
-// @route   GET /api/events/:id/similar
+// @route   GET /api/events/:idOrSlug/similar
 // @access  Public
 exports.getSimilarEvents = catchAsync(async (req, res, next) => {
-  const { id } = req.params;
+  const { id: idOrSlug } = req.params;
   const limit = parseInt(req.query.limit, 10) || 5;
 
-  // Get the current event to find its location
-  const currentEvent = await Event.findById(id);
+  // Get the current event to find its location (handle both ID and slug)
+  let currentEvent = null;
+  
+  // Check if the parameter is a valid ObjectId format
+  const isValidObjectId = mongoose.Types.ObjectId.isValid(idOrSlug) && /^[0-9a-fA-F]{24}$/.test(idOrSlug);
+  
+  if (isValidObjectId) {
+    // If it's a valid ObjectId, search by ID
+    currentEvent = await Event.findById(idOrSlug);
+  } else {
+    // If it's not a valid ObjectId, treat it as a slug
+    currentEvent = await Event.findOne({ slug: idOrSlug });
+  }
+  
   if (!currentEvent) {
     return res.status(404).json({
       status: 'fail',
@@ -471,7 +497,7 @@ exports.getSimilarEvents = catchAsync(async (req, res, next) => {
 
   // Build query to find events with similar location
   const locationQuery = {
-    _id: { $ne: id }, // Exclude current event
+    _id: { $ne: currentEvent._id }, // Exclude current event using actual ObjectId
     $or: [
       { 'location.state': currentEvent.location.state },
       { 'location.city': currentEvent.location.city },
@@ -494,7 +520,7 @@ exports.getSimilarEvents = catchAsync(async (req, res, next) => {
     
     // Strategy 1: Try events in the same category
     let fallbackEvents = await Event.find({
-      _id: { $ne: id },
+      _id: { $ne: currentEvent._id },
       category: currentEvent.category
     })
     .limit(limit)
@@ -508,7 +534,7 @@ exports.getSimilarEvents = catchAsync(async (req, res, next) => {
     // Strategy 2: If still no events, get highest rated events
     if (fallbackEvents.length === 0) {
       fallbackEvents = await Event.find({
-        _id: { $ne: id }
+        _id: { $ne: currentEvent._id }
       })
       .limit(limit)
       .populate({
