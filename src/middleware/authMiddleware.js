@@ -27,18 +27,34 @@ exports.protect = catchAsync(async (req, res, next) => {
   }
 
   // 2) Verify token
-  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  let decoded;
+  try {
+    decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  } catch (error) {
+    return res.status(401).json({
+      status: 'fail',
+      message: 'Invalid or expired token. Please log in again.'
+    });
+  }
 
   // 3) Check if user still exists
   const currentUser = await User.findById(decoded.userId);
   if (!currentUser) {
     return res.status(401).json({
       status: 'fail',
-      message: 'The user belonging to this token no longer exists.'
+      message: 'Your account has been deleted. Please contact support if you believe this is an error.'
     });
   }
 
-  // 4) Check if user changed password after the token was issued
+  // 4) Check if user is active (additional security check)
+  if (currentUser.isActive === false) {
+    return res.status(401).json({
+      status: 'fail',
+      message: 'Your account has been deactivated. Please contact support for assistance.'
+    });
+  }
+
+  // 5) Check if user changed password after the token was issued
   if (currentUser.passwordChangedAt && currentUser.passwordChangedAfter(decoded.iat)) {
     return res.status(401).json({
       status: 'fail',

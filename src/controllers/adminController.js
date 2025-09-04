@@ -9,6 +9,9 @@ const ContactUs = require('../models/ContactUs');
 const Notification = require('../models/Notification');
 const UserEvent = require('../models/UserEvent');
 const Todo = require('../models/Todo');
+const CheckoutSession = require('../models/CheckoutSession'); // Added for vendor deletion cascade
+const Message = require('../models/Message'); // Added for vendor deletion cascade
+const ViewCount = require('../models/ViewCount'); // Added for vendor deletion cascade
 
 const catchAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -153,45 +156,140 @@ exports.getOverview = catchAsync(async (req, res) => {
 
 // ---------- USERS ----------
 exports.listUsers = catchAsync(async (req, res) => {
-  const { page = 1, limit = 20, role, active, search } = req.query;
+  const { page = 1, limit = 20, role, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
   const pageNum = parseInt(page, 10);
   const limitNum = Math.min(100, parseInt(limit, 10));
   const skip = (pageNum - 1) * limitNum;
 
   const query = {};
   if (role) query.role = role;
-  if (active !== undefined) query.isActive = active === 'true';
   if (search) {
     const regex = new RegExp(search, 'i');
     query.$or = [
       { email: regex },
+      { phoneNumber: regex },
       { 'customerProfile.fullName': regex },
       { 'vendorProfile.businessName': regex },
-      { phoneNumber: regex },
+      { 'vendorProfile.ownerName': regex }
     ];
   }
 
+  const sort = {};
+  sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
   const [users, total] = await Promise.all([
     User.find(query)
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip(skip)
       .limit(limitNum)
       .select('-password -passwordResetToken -passwordResetExpires -emailVerificationToken -emailVerificationExpires'),
     User.countDocuments(query),
   ]);
 
-  res.status(200).json({
-    success: true,
-    data: { users, pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) } },
-  });
+  res.status(200).json({ success: true, data: { users, pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) } } });
 });
 
 exports.getUser = catchAsync(async (req, res) => {
-  const user = await User.findById(req.params.id).select(
-    '-password -passwordResetToken -passwordResetExpires -emailVerificationToken -emailVerificationExpires'
-  );
+  const user = await User.findById(req.params.id).select('-password -passwordResetToken -passwordResetExpires -emailVerificationToken -emailVerificationExpires');
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
   res.status(200).json({ success: true, data: { user } });
+});
+
+exports.getUserDeletionImpact = catchAsync(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  if (user.role === 'admin') return res.status(400).json({ success: false, message: 'Cannot delete admin user' });
+
+  let impact = {
+    user: {
+      id: user._id,
+      email: user.email,
+      role: user.role
+    },
+    willBeDeleted: {}
+  };
+
+  if (user.role === 'vendor') {
+    const [
+      eventsCount,
+      bookingsCount,
+      reviewsCount,
+      checkoutSessionsCount,
+      notificationsCount,
+      messagesCount,
+      invoicesCount,
+      viewCountsCount
+    ] = await Promise.all([
+      Event.countDocuments({ vendor: user._id }),
+      Booking.countDocuments({ vendor: user._id }),
+      Review.countDocuments({ vendor: user._id }),
+      CheckoutSession.countDocuments({ vendorId: user._id }),
+      Notification.countDocuments({ $or: [{ recipient: user._id }, { sender: user._id }] }),
+      Message.countDocuments({ $or: [{ sender: user._id }, { recipient: user._id }] }),
+      Invoice.countDocuments({ vendor: user._id }),
+      ViewCount.countDocuments({ vendorId: user._id })
+    ]);
+
+    impact.willBeDeleted = {
+      events: eventsCount,
+      bookings: bookingsCount,
+      reviews: reviewsCount,
+      checkoutSessions: checkoutSessionsCount,
+      notifications: notificationsCount,
+      messages: messagesCount,
+      invoices: invoicesCount,
+      viewCounts: viewCountsCount
+    };
+
+    // Check for active bookings
+    const activeBookings = await Booking.countDocuments({ 
+      vendor: user._id, 
+      status: { $in: ['Pending', 'Confirmed'] } 
+    });
+    impact.activeBookings = activeBookings;
+
+    // Check for pending payments
+    const pendingPayments = await CheckoutSession.countDocuments({ 
+      vendorId: user._id, 
+      status: 'pending' 
+    });
+    impact.pendingPayments = pendingPayments;
+
+  } else if (user.role === 'customer') {
+    const [
+      bookingsCount,
+      reviewsCount,
+      notificationsCount,
+      messagesCount,
+      userEventsCount,
+      todosCount
+    ] = await Promise.all([
+      Booking.countDocuments({ customer: user._id }),
+      Review.countDocuments({ customer: user._id }),
+      Notification.countDocuments({ $or: [{ recipient: user._id }, { sender: user._id }] }),
+      Message.countDocuments({ $or: [{ sender: user._id }, { recipient: user._id }] }),
+      UserEvent.countDocuments({ user: user._id }),
+      Todo.countDocuments({ user: user._id })
+    ]);
+
+    impact.willBeDeleted = {
+      bookings: bookingsCount,
+      reviews: reviewsCount,
+      notifications: notificationsCount,
+      messages: messagesCount,
+      userEvents: userEventsCount,
+      todos: todosCount
+    };
+
+    // Check for active bookings
+    const activeBookings = await Booking.countDocuments({ 
+      customer: user._id, 
+      status: { $in: ['Pending', 'Confirmed'] } 
+    });
+    impact.activeBookings = activeBookings;
+  }
+
+  res.status(200).json({ success: true, data: { impact } });
 });
 
 exports.updateUserStatus = catchAsync(async (req, res) => {
@@ -237,11 +335,178 @@ exports.updateUserRole = catchAsync(async (req, res) => {
 });
 
 exports.deleteUser = catchAsync(async (req, res) => {
+  const adminUser = req.user;
+  console.log(`\n👑 ADMIN ACTION - User Deletion Request`);
+  console.log(`👤 Admin: ${adminUser.email} (${adminUser.role})`);
+  console.log(`🎯 Target User ID: ${req.params.id}`);
+  console.log(`⏰ Requested at: ${new Date().toISOString()}`);
+  
   const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-  if (user.role === 'admin') return res.status(400).json({ success: false, message: 'Cannot delete admin user' });
+  if (!user) {
+    console.log(`❌ User not found: ${req.params.id}`);
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+  
+  console.log(`🎯 Target User: ${user.email} (${user.role})`);
+  
+  if (user.role === 'admin') {
+    console.log(`❌ Cannot delete admin user: ${user.email}`);
+    return res.status(400).json({ success: false, message: 'Cannot delete admin user' });
+  }
+  
+  // If deleting a vendor, we need to clean up related data
+  if (user.role === 'vendor') {
+    try {
+      // Check for active bookings that might need special handling
+      const activeBookings = await Booking.find({ 
+        vendor: user._id, 
+        status: { $in: ['Pending', 'Confirmed'] } 
+      });
+      
+      if (activeBookings.length > 0) {
+        console.log(`❌ Cannot delete vendor with ${activeBookings.length} active bookings`);
+        return res.status(400).json({ 
+          success: false, 
+          message: `Cannot delete vendor with ${activeBookings.length} active bookings. Please cancel or complete all bookings first.`,
+          activeBookings: activeBookings.length
+        });
+      }
+      
+      // Check for pending payments
+      const pendingPayments = await CheckoutSession.find({ 
+        vendorId: user._id, 
+        status: 'pending' 
+      });
+      
+      if (pendingPayments.length > 0) {
+        console.log(`❌ Cannot delete vendor with ${pendingPayments.length} pending payments`);
+        return res.status(400).json({ 
+          success: false, 
+          message: `Cannot delete vendor with ${pendingPayments.length} pending payments. Please resolve all payment issues first.`,
+          pendingPayments: pendingPayments.length
+        });
+      }
+      
+      console.log(`🧹 Cleaning up vendor data for: ${user.email}`);
+      
+      // Delete all events (listings) created by this vendor
+      await Event.deleteMany({ vendor: user._id });
+      
+      // Delete all bookings for this vendor
+      await Booking.deleteMany({ vendor: user._id });
+      
+      // Delete all reviews for this vendor
+      await Review.deleteMany({ vendor: user._id });
+      
+      // Delete all checkout sessions for this vendor
+      await CheckoutSession.deleteMany({ vendorId: user._id });
+      
+      // Delete all notifications for this vendor
+      await Notification.deleteMany({ 
+        $or: [
+          { recipient: user._id },
+          { sender: user._id }
+        ]
+      });
+      
+      // Delete all messages for this vendor
+      await Message.deleteMany({
+        $or: [
+          { sender: user._id },
+          { recipient: user._id }
+        ]
+      });
+      
+      // Delete all invoices for this vendor
+      await Invoice.deleteMany({ vendor: user._id });
+      
+      // Delete all view counts for this vendor
+      await ViewCount.deleteMany({ vendorId: user._id });
+      
+      console.log(`✅ Cleaned up all related data for vendor: ${user.email} (${user._id})`);
+    } catch (error) {
+      console.error('❌ Error cleaning up vendor data:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to clean up vendor data. Please try again.' 
+      });
+    }
+  } else if (user.role === 'customer') {
+    try {
+      // Check for active bookings that might need special handling
+      const activeBookings = await Booking.find({ 
+        customer: user._id, 
+        status: { $in: ['Pending', 'Confirmed'] } 
+      });
+      
+      if (activeBookings.length > 0) {
+        console.log(`❌ Cannot delete customer with ${activeBookings.length} active bookings`);
+        return res.status(400).json({ 
+          success: false, 
+          message: `Cannot delete customer with ${activeBookings.length} active bookings. Please cancel or complete all bookings first.`,
+          activeBookings: activeBookings.length
+        });
+      }
+      
+      console.log(`🧹 Cleaning up customer data for: ${user.email}`);
+      
+      // Delete all bookings for this customer
+      await Booking.deleteMany({ customer: user._id });
+      
+      // Delete all reviews by this customer
+      await Review.deleteMany({ customer: user._id });
+      
+      // Delete all notifications for this customer
+      await Notification.deleteMany({ 
+        $or: [
+          { recipient: user._id },
+          { sender: user._id }
+        ]
+      });
+      
+      // Delete all messages for this customer
+      await Message.deleteMany({
+        $or: [
+          { sender: user._id },
+          { recipient: user._id }
+        ]
+      });
+      
+      // Delete all user events (planner) for this customer
+      await UserEvent.deleteMany({ user: user._id });
+      
+      // Delete all todos for this customer
+      await Todo.deleteMany({ user: user._id });
+      
+      console.log(`✅ Cleaned up all related data for customer: ${user.email} (${user._id})`);
+    } catch (error) {
+      console.error('❌ Error cleaning up customer data:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to clean up customer data. Please try again.' 
+      });
+    }
+  }
+  
+  // Store user info for logging before deletion
+  const userInfo = {
+    id: user._id,
+    email: user.email,
+    role: user.role
+  };
+  
+  // Delete the user
   await User.findByIdAndDelete(user._id);
-  res.status(200).json({ success: true, message: 'User deleted' });
+  
+  console.log(`✅ User deleted successfully: ${user.email} (${user.role})`);
+  console.log(`👑 Admin action completed by: ${adminUser.email}`);
+  console.log(`⏰ Completed at: ${new Date().toISOString()}\n`);
+  
+  res.status(200).json({ 
+    success: true, 
+    message: `${user.role === 'vendor' ? 'Vendor' : 'User'} deleted successfully`,
+    deletedUser: userInfo
+  });
 });
 
 // ---------- VENDORS ----------
@@ -667,6 +932,7 @@ module.exports = {
   getOverview: exports.getOverview,
   listUsers: exports.listUsers,
   getUser: exports.getUser,
+  getUserDeletionImpact: exports.getUserDeletionImpact,
   updateUserStatus: exports.updateUserStatus,
   updateUserVerification: exports.updateUserVerification,
   updateUserRole: exports.updateUserRole,
