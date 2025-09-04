@@ -24,7 +24,8 @@ const {
   broadcastNotification,
   // User Events & Todos
   listUserEvents, getUserEvent, updateUserEvent, deleteUserEvent,
-  listTodos, updateTodo, deleteTodo
+  listTodos, updateTodo, deleteTodo,
+  getUserDeletionImpact
 } = require('../../controllers/adminController');
 
 // All routes here are admin-only
@@ -36,6 +37,7 @@ router.get('/overview', getOverview);
 // Users
 router.get('/users', listUsers);
 router.get('/users/:id', getUser);
+router.get('/users/:id/deletion-impact', getUserDeletionImpact);
 router.patch('/users/:id/status', updateUserStatus);
 router.patch('/users/:id/verification', updateUserVerification);
 router.patch('/users/:id/role', updateUserRole);
