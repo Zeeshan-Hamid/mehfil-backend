@@ -12,6 +12,8 @@ const Todo = require('../models/Todo');
 const CheckoutSession = require('../models/CheckoutSession'); // Added for vendor deletion cascade
 const Message = require('../models/Message'); // Added for vendor deletion cascade
 const ViewCount = require('../models/ViewCount'); // Added for vendor deletion cascade
+const PromotionalEvent = require('../models/PromotionalEvent');
+const { processAndUploadPromotionalEventImages } = require('../services/fileUploadService');
 
 const catchAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -928,6 +930,315 @@ exports.broadcastNotification = catchAsync(async (req, res) => {
 
 // Explicitly avoid any message content endpoints per requirements.
 
+// ---------- PROMOTIONAL EVENTS ----------
+exports.listPromotionalEvents = catchAsync(async (req, res) => {
+  const { page = 1, limit = 20, search, isActive, isFeatured, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+  const pageNum = parseInt(page, 10);
+  const limitNum = Math.min(100, parseInt(limit, 10));
+  const skip = (pageNum - 1) * limitNum;
+
+  const query = {};
+  if (isActive !== undefined) query.isActive = isActive === 'true';
+  if (isFeatured !== undefined) query.isFeatured = isFeatured === 'true';
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    query.$or = [
+      { title: regex },
+      { description: regex },
+      { tagline: regex },
+      { 'location.city': regex },
+      { 'location.state': regex }
+    ];
+  }
+
+  const sort = {};
+  sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+  const [promotionalEvents, total] = await Promise.all([
+    PromotionalEvent.find(query)
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .populate('createdBy', 'email'),
+    PromotionalEvent.countDocuments(query),
+  ]);
+
+  res.status(200).json({ 
+    success: true, 
+    data: { 
+      promotionalEvents, 
+      pagination: { 
+        total, 
+        page: pageNum, 
+        limit: limitNum, 
+        pages: Math.ceil(total / limitNum) 
+      } 
+    } 
+  });
+});
+
+exports.getPromotionalEvent = catchAsync(async (req, res) => {
+  const promotionalEvent = await PromotionalEvent.findById(req.params.id)
+    .populate('createdBy', 'email');
+  if (!promotionalEvent) {
+    return res.status(404).json({ success: false, message: 'Promotional event not found' });
+  }
+  res.status(200).json({ success: true, data: { promotionalEvent } });
+});
+
+exports.createPromotionalEvent = catchAsync(async (req, res) => {
+  const { title, tagline, description, url, date, time, location, ticketPrice, ticketsAvailable } = req.body;
+  
+  // Parse location if it's a JSON string
+  let parsedLocation = location;
+  if (typeof location === 'string') {
+    try {
+      parsedLocation = JSON.parse(location);
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid location format' 
+      });
+    }
+  }
+  
+  // Validate required fields
+  const required = ['title', 'description', 'date', 'location'];
+  const missing = required.filter(field => !req.body[field]);
+  if (missing.length) {
+    return res.status(400).json({ 
+      success: false, 
+      message: `Missing required fields: ${missing.join(', ')}` 
+    });
+  }
+
+  // Validate location fields
+  if (!parsedLocation.city || !parsedLocation.state || !parsedLocation.zipCode) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Location must include city, state, and zipCode' 
+    });
+  }
+
+  // Handle image uploads
+  let imageUrls = [];
+  if (req.files && req.files.length > 0) {
+    try {
+      imageUrls = await processAndUploadPromotionalEventImages(req.files, req.user._id);
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to upload images: ' + error.message 
+      });
+    }
+  } else {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'At least one image is required' 
+    });
+  }
+
+  const promotionalEventData = {
+    createdBy: req.user._id,
+    title,
+    tagline,
+    description,
+    images: imageUrls,
+    url,
+    date: new Date(date),
+    time,
+    location: parsedLocation,
+    ticketPrice,
+    ticketsAvailable
+  };
+
+  const promotionalEvent = await PromotionalEvent.create(promotionalEventData);
+  await promotionalEvent.populate('createdBy', 'email');
+  
+  res.status(201).json({ 
+    success: true, 
+    message: 'Promotional event created successfully', 
+    data: { promotionalEvent } 
+  });
+});
+
+exports.updatePromotionalEvent = catchAsync(async (req, res) => {
+  const promotionalEvent = await PromotionalEvent.findById(req.params.id);
+  if (!promotionalEvent) {
+    return res.status(404).json({ success: false, message: 'Promotional event not found' });
+  }
+
+  const allowedUpdates = [
+    'title', 'tagline', 'description', 'images', 'url', 'date', 'time', 
+    'location', 'ticketPrice', 'ticketsAvailable', 'isActive', 'isFeatured'
+  ];
+  
+  const update = {};
+  allowedUpdates.forEach(field => {
+    if (req.body[field] !== undefined) {
+      update[field] = req.body[field];
+    }
+  });
+
+
+  // Parse location if it's a JSON string
+  if (update.location && typeof update.location === 'string') {
+    try {
+      update.location = JSON.parse(update.location);
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid location format' 
+      });
+    }
+  }
+
+  // Parse images if it's a JSON string
+  if (update.images && typeof update.images === 'string') {
+    try {
+      update.images = JSON.parse(update.images);
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid images format' 
+      });
+    }
+  }
+
+  // Handle date conversion
+  if (update.date) {
+    update.date = new Date(update.date);
+  }
+
+  // Handle image updates - delete old images that are no longer in the new list
+  if (update.images && Array.isArray(update.images)) {
+    const oldImages = promotionalEvent.images || [];
+    const newImages = update.images;
+    
+    // Find images to delete (images that were in oldImages but not in newImages)
+    const imagesToDelete = oldImages.filter(oldImage => !newImages.includes(oldImage));
+    
+    // Delete old images from S3
+    if (imagesToDelete.length > 0) {
+      try {
+        const AWS = require('aws-sdk');
+        const s3 = new AWS.S3({
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+          region: process.env.AWS_REGION
+        });
+
+        await Promise.all(imagesToDelete.map(async (imageUrl) => {
+          try {
+            // Extract the key from the S3 URL
+            const urlParts = imageUrl.split('/');
+            const key = urlParts.slice(3).join('/'); // Remove the domain parts
+            
+                   await s3.deleteObject({
+                     Bucket: process.env.S3_BUCKET_NAME,
+                     Key: key
+                   }).promise();
+                 } catch (error) {
+                   // Don't throw error here, just log it
+                 }
+               }));
+             } catch (error) {
+               // Don't throw error here, just log it
+             }
+    }
+  }
+
+  // Handle new image uploads if any files are provided
+  let newImageUrls = [];
+  if (req.files && req.files.length > 0) {
+    try {
+      const { processAndUploadPromotionalEventImages } = require('../services/fileUploadService');
+      newImageUrls = await processAndUploadPromotionalEventImages(req.files, req.user._id);
+      
+      // Add new images to the existing images
+      if (update.images) {
+        update.images = [...update.images, ...newImageUrls];
+      } else {
+        update.images = [...(promotionalEvent.images || []), ...newImageUrls];
+      }
+      
+    } catch (error) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to upload new images: ' + error.message 
+      });
+    }
+  }
+
+  const updatedPromotionalEvent = await PromotionalEvent.findByIdAndUpdate(
+    req.params.id,
+    update,
+    { new: true, runValidators: true }
+  ).populate('createdBy', 'email');
+
+  res.status(200).json({ 
+    success: true, 
+    message: 'Promotional event updated successfully', 
+    data: { promotionalEvent: updatedPromotionalEvent } 
+  });
+});
+
+exports.deletePromotionalEvent = catchAsync(async (req, res) => {
+  const promotionalEvent = await PromotionalEvent.findById(req.params.id);
+  if (!promotionalEvent) {
+    return res.status(404).json({ success: false, message: 'Promotional event not found' });
+  }
+
+  await PromotionalEvent.findByIdAndDelete(promotionalEvent._id);
+  res.status(200).json({ success: true, message: 'Promotional event deleted successfully' });
+});
+
+exports.togglePromotionalEventFeatured = catchAsync(async (req, res) => {
+  const { isFeatured } = req.body;
+  if (typeof isFeatured !== 'boolean') {
+    return res.status(400).json({ success: false, message: 'isFeatured must be boolean' });
+  }
+
+  const promotionalEvent = await PromotionalEvent.findByIdAndUpdate(
+    req.params.id,
+    { isFeatured, featuredAt: isFeatured ? new Date() : null },
+    { new: true }
+  ).populate('createdBy', 'email');
+
+  if (!promotionalEvent) {
+    return res.status(404).json({ success: false, message: 'Promotional event not found' });
+  }
+
+  res.status(200).json({ 
+    success: true, 
+    message: 'Promotional event feature flag updated', 
+    data: { promotionalEvent } 
+  });
+});
+
+exports.togglePromotionalEventActive = catchAsync(async (req, res) => {
+  const { isActive } = req.body;
+  if (typeof isActive !== 'boolean') {
+    return res.status(400).json({ success: false, message: 'isActive must be boolean' });
+  }
+
+  const promotionalEvent = await PromotionalEvent.findByIdAndUpdate(
+    req.params.id,
+    { isActive },
+    { new: true }
+  ).populate('createdBy', 'email');
+
+  if (!promotionalEvent) {
+    return res.status(404).json({ success: false, message: 'Promotional event not found' });
+  }
+
+  res.status(200).json({ 
+    success: true, 
+    message: `Event ${isActive ? 'activated' : 'deactivated'} successfully`,
+    data: { promotionalEvent }
+  });
+});
+
 module.exports = {
   getOverview: exports.getOverview,
   listUsers: exports.listUsers,
@@ -971,6 +1282,14 @@ module.exports = {
   updateContact: exports.updateContact,
   deleteContact: exports.deleteContact,
   broadcastNotification: exports.broadcastNotification,
+  // Promotional Events
+  listPromotionalEvents: exports.listPromotionalEvents,
+  getPromotionalEvent: exports.getPromotionalEvent,
+  createPromotionalEvent: exports.createPromotionalEvent,
+  updatePromotionalEvent: exports.updatePromotionalEvent,
+  deletePromotionalEvent: exports.deletePromotionalEvent,
+  togglePromotionalEventFeatured: exports.togglePromotionalEventFeatured,
+  togglePromotionalEventActive: exports.togglePromotionalEventActive,
 };
 
 

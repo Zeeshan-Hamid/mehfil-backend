@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect, restrictTo } = require('../../middleware/authMiddleware');
+const { uploadInMemory } = require('../../services/fileUploadService');
 
 const {
   getOverview,
@@ -25,7 +26,11 @@ const {
   // User Events & Todos
   listUserEvents, getUserEvent, updateUserEvent, deleteUserEvent,
   listTodos, updateTodo, deleteTodo,
-  getUserDeletionImpact
+  getUserDeletionImpact,
+  // Promotional Events
+  listPromotionalEvents, getPromotionalEvent, createPromotionalEvent,
+  updatePromotionalEvent, deletePromotionalEvent, togglePromotionalEventFeatured,
+  togglePromotionalEventActive
 } = require('../../controllers/adminController');
 
 // All routes here are admin-only
@@ -94,6 +99,15 @@ router.delete('/user-events/:id', deleteUserEvent);
 router.get('/todos', listTodos);
 router.patch('/todos/:id', updateTodo);
 router.delete('/todos/:id', deleteTodo);
+
+// Promotional Events
+router.get('/promotional-events', listPromotionalEvents);
+router.get('/promotional-events/:id', getPromotionalEvent);
+router.post('/promotional-events', uploadInMemory.array('images', 10), createPromotionalEvent);
+router.patch('/promotional-events/:id', updatePromotionalEvent);
+router.delete('/promotional-events/:id', deletePromotionalEvent);
+router.patch('/promotional-events/:id/featured', togglePromotionalEventFeatured);
+router.patch('/promotional-events/:id/active', togglePromotionalEventActive);
 
 module.exports = router;
 
