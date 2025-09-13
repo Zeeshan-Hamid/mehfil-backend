@@ -21,13 +21,16 @@ const populatePackageDetails = async (booking) => {
     let eventPackage;
     if (booking.packageType === 'regular') {
         eventPackage = event.packages.id(booking.package);
-    } else {
+    } else if (booking.packageType === 'custom') {
         eventPackage = event.customPackages.id(booking.package);
+    } else if (booking.packageType === 'flatPrice') {
+        // For flat price bookings, return a special package object
+        eventPackage = { name: 'Flat Price' };
     }
 
     return {
         ...booking.toObject(),
-        package: eventPackage ? eventPackage.toObject() : { name: 'Package not found' }
+        package: eventPackage ? (eventPackage.toObject ? eventPackage.toObject() : eventPackage) : { name: 'Package not found' }
     };
 };
 
@@ -491,7 +494,7 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
 // @access  Private (Vendor only)
 exports.updateVendorBooking = catchAsync(async (req, res, next) => {
     const { id } = req.params;
-    const { customerName, customerEmail, eventDate, attendees, totalPrice, status } = req.body;
+    const { customerName, customerEmail, eventDate, eventTime, attendees, totalPrice, status } = req.body;
     const vendorId = req.user.id;
 
     // Find the booking
@@ -517,6 +520,7 @@ exports.updateVendorBooking = catchAsync(async (req, res, next) => {
 
     // Update booking fields
     if (eventDate) booking.eventDate = eventDate;
+    if (eventTime) booking.eventTime = eventTime;
     if (attendees) booking.attendees = attendees;
     if (totalPrice !== undefined) booking.totalPrice = totalPrice;
     if (status) booking.status = status;

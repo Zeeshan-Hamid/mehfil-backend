@@ -2,6 +2,8 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const Event = require('../models/Event');
 const Notification = require('../models/Notification');
+const Booking = require('../models/Booking');
+const EmailService = require('../services/emailService');
 const mongoose = require('mongoose');
 const { processAndUploadMessageImage, processAndUploadMultipleMessageImages, uploadMessageDocument } = require('../services/fileUploadService');
 
@@ -307,7 +309,63 @@ exports.sendMessage = catchAsync(async (req, res) => {
 
         await newMessage.populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
         
-        
+        // Check if this is a cancellation request and send email to vendor
+        const isCancellationRequest = content && content.includes('🚨 CANCELLATION REQUEST');
+        if (isCancellationRequest && receiver.role === 'vendor') {
+            try {
+                // Extract order details from the cancellation message
+                const orderIdMatch = content.match(/Order ID: ([^\n]+)/);
+                const eventMatch = content.match(/Event: ([^\n]+)/);
+                const dateMatch = content.match(/Date: ([^\n]+)/);
+                const locationMatch = content.match(/Location: ([^\n]+)/);
+                const amountMatch = content.match(/Total Amount: \$ ([^\n]+)/);
+                const reasonMatch = content.match(/Reason for Cancellation: ([^\n]+)/);
+                
+                if (orderIdMatch && eventMatch) {
+                    const orderId = orderIdMatch[1].trim();
+                    const eventTitle = eventMatch[1].trim();
+                    const eventDate = dateMatch ? dateMatch[1].trim() : 'Not specified';
+                    const eventLocation = locationMatch ? locationMatch[1].trim() : 'Not specified';
+                    const totalAmount = amountMatch ? parseFloat(amountMatch[1].replace(/,/g, '')) : 0;
+                    const cancellationReason = reasonMatch ? reasonMatch[1].trim() : 'No specific reason provided';
+                    
+                    // Extract time from date if it contains time
+                    let eventTime = null;
+                    if (eventDate.includes(' at ')) {
+                        const timeMatch = eventDate.match(/ at (.+)$/);
+                        if (timeMatch) {
+                            eventTime = timeMatch[1].trim();
+                        }
+                    }
+                    
+                    // Get customer details
+                    const customer = await User.findById(senderId).select('email customerProfile.fullName customerProfile.firstName customerProfile.lastName phoneNumber');
+                    const customerName = customer.customerProfile?.fullName || 
+                                       `${customer.customerProfile?.firstName || ''} ${customer.customerProfile?.lastName || ''}`.trim() || 
+                                       'Customer';
+                    
+                    // Send cancellation email to vendor
+                    await EmailService.sendCancellationRequestEmail({
+                        vendorEmail: receiver.email,
+                        vendorName: receiver.vendorProfile?.businessName || receiver.vendorProfile?.ownerName || 'Vendor',
+                        customerName: customerName,
+                        customerEmail: customer.email,
+                        customerPhone: customer.phoneNumber,
+                        customerId: senderId, // Pass the customer ID for URL parameter
+                        orderId: orderId,
+                        eventTitle: eventTitle,
+                        eventDate: eventDate.replace(/ at .+$/, ''), // Remove time from date
+                        eventTime: eventTime,
+                        eventLocation: eventLocation,
+                        totalAmount: totalAmount,
+                        cancellationReason: cancellationReason
+                    });
+                }
+            } catch (emailError) {
+                console.error('❌ [MessageController] Error sending cancellation email:', emailError);
+                // Don't fail the message sending if email fails
+            }
+        }
 
         // Create notification for the receiver
         try {
