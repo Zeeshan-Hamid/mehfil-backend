@@ -326,6 +326,7 @@ exports.handleStripeWebhook = async (req, res) => {
                             package: item.packageId,
                             packageType: item.packageType,
                             eventDate: item.eventDate,
+                            eventTime: item.eventTime,
                             attendees: item.attendees,
                             totalPrice: item.totalPrice,
                             status: 'Confirmed',
