@@ -125,6 +125,7 @@ exports.createCheckoutSession = async (req, res) => {
 				vendorName: eventDoc?.vendor?.vendorProfile?.businessName,
 				packageType: item.packageType,
 				eventDate: item.eventDate,
+				eventTime: item.eventTime,
 				attendees: item.attendees,
 				totalPrice: item.totalPrice,
 				display: { name: item.event?.name, description: packageDescription }

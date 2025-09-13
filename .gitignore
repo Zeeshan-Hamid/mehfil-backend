@@ -8,6 +8,7 @@ frontend/package-lock.json
 frontend/
 package-lock.json
 
+
 # Environment variables
 .env
 .env.local
