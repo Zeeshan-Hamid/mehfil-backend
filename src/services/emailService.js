@@ -233,6 +233,107 @@ class EmailService {
       throw new Error('Failed to send verification success email');
     }
   }
+
+  static async sendCancellationRequestEmail({ 
+    vendorEmail, 
+    vendorName, 
+    customerName, 
+    customerEmail, 
+    customerPhone,
+    customerId,
+    orderId, 
+    eventTitle, 
+    eventDate, 
+    eventTime, 
+    eventLocation, 
+    totalAmount, 
+    cancellationReason 
+  }) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const title = '🚨 New Cancellation Request';
+
+    const orderDetails = `
+      <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #d32f2f;">
+        <h3 style="color: #d32f2f; margin: 0 0 15px 0; font-size: 18px;">📋 Order Details</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <div style="margin-bottom: 8px;"><strong>Order ID:</strong> ${orderId}</div>
+          <div style="margin-bottom: 8px;"><strong>Event:</strong> ${eventTitle}</div>
+          <div style="margin-bottom: 8px;"><strong>Date:</strong> ${eventDate}${eventTime ? ` at ${eventTime}` : ''}</div>
+          <div style="margin-bottom: 8px;"><strong>Location:</strong> ${eventLocation}</div>
+          <div style="margin-bottom: 8px;"><strong>Total Amount:</strong> ${this.formatCurrency(totalAmount)}</div>
+        </div>
+      </div>
+    `;
+
+    const customerDetails = `
+      <div style="background-color: #f0f8ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976d2;">
+        <h3 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">👤 Customer Details</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <div style="margin-bottom: 8px;"><strong>Name:</strong> ${customerName}</div>
+          <div style="margin-bottom: 8px;"><strong>Email:</strong> ${customerEmail}</div>
+          <div style="margin-bottom: 8px;"><strong>Phone:</strong> ${customerPhone || 'Not provided'}</div>
+        </div>
+      </div>
+    `;
+
+    const cancellationDetails = `
+      <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f57c00;">
+        <h3 style="color: #f57c00; margin: 0 0 15px 0; font-size: 18px;">📝 Cancellation Request</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <p style="margin: 0 0 10px 0;">The customer has requested to cancel this booking. Please review the details and respond accordingly.</p>
+          <div style="background-color: #fff; padding: 15px; border-radius: 6px; border: 1px solid #e0e0e0;">
+            <strong>Reason for Cancellation:</strong><br>
+            <em style="color: #666;">${cancellationReason || 'No specific reason provided'}</em>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const content = `
+      <p style="text-align:left;">Hi ${vendorName || 'there'},</p>
+      <p style="text-align:left;">You have received a new cancellation request from a customer. Please review the details below and respond to the customer through your Mehfil dashboard.</p>
+      
+      ${orderDetails}
+      ${customerDetails}
+      ${cancellationDetails}
+      
+      <p style="text-align:left; color:#777; font-size:14px; margin-top: 25px;">
+        <strong>Next Steps:</strong><br>
+        • Review the cancellation request and reason<br>
+        • Check your cancellation policy<br>
+        • Respond to the customer through your dashboard<br>
+        • Process any applicable refunds if approved
+      </p>
+      
+      <p style="text-align:left; color:#777; font-size:13px; margin-top: 20px;">
+        You can view and respond to this message in your <strong>Messages</strong> section on your vendor dashboard.
+      </p>
+    `;
+
+    const button = { 
+      text: 'View Messages', 
+      url: `${frontendUrl}/profile_listing?tab=Messages&customerId=${customerId}` 
+    };
+
+    const html = emailTemplate(title, content, button);
+
+    const message = {
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      to: vendorEmail,
+      subject: `Cancellation Request - Order ${orderId} - Mehfil`,
+      html,
+    };
+
+    try {
+      const info = await transporter.sendMail(message);
+      console.log('✅ Cancellation request email sent successfully to vendor:', vendorEmail);
+      return true;
+    } catch (error) {
+      console.error('❌ Error sending cancellation request email:', error);
+      // Do not throw to avoid failing message flow
+      return false;
+    }
+  }
 }
 
 module.exports = EmailService; 
