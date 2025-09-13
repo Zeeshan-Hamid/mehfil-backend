@@ -56,6 +56,7 @@ exports.getCart = async (req, res) => {
         package: eventPackage || { name: 'Package not found' },
         packageType: item.packageType,
         eventDate: item.eventDate,
+        eventTime: item.eventTime,
         attendees: item.attendees,
         totalPrice: item.totalPrice,
         addedAt: item.addedAt
