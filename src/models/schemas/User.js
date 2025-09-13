@@ -177,6 +177,17 @@ const userSchema = new mongoose.Schema(
             type: Date,
             required: true
           },
+          eventTime: {
+            type: String,
+            required: true,
+            validate: {
+              validator: function(v) {
+                // Validate time format (HH:MM AM/PM)
+                return /^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i.test(v);
+              },
+              message: 'Event time must be in HH:MM AM/PM format (US timezone)'
+            }
+          },
           attendees: {
             type: Number,
             required: true,

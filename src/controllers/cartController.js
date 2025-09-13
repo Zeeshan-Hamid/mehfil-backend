@@ -78,10 +78,10 @@ exports.getCart = async (req, res) => {
 // @route   POST /api/cart
 // @access  Private (Customers only)
 exports.addToCart = async (req, res) => {
-  const { eventId, packageId, packageType, eventDate, attendees, totalPrice } = req.body;
+  const { eventId, packageId, packageType, eventDate, eventTime, attendees, totalPrice } = req.body;
 
-  if (!eventId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
-    return res.status(400).json({ success: false, message: 'Please provide eventId, packageType, eventDate, attendees, and totalPrice.' });
+  if (!eventId || !packageType || !eventDate || !eventTime || !attendees || totalPrice === undefined) {
+    return res.status(400).json({ success: false, message: 'Please provide eventId, packageType, eventDate, eventTime, attendees, and totalPrice.' });
   }
 
   // For flat price, packageId is not required
@@ -95,7 +95,18 @@ exports.addToCart = async (req, res) => {
 
   try {
     const user = await User.findById(req.user.id);
-    const event = await Event.findById(eventId);
+    
+    // Handle both ObjectId and slug for event lookup
+    let event = null;
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+    
+    if (isValidObjectId) {
+      // If it's a valid ObjectId, search by ID
+      event = await Event.findById(eventId);
+    } else {
+      // If it's not a valid ObjectId, treat it as a slug
+      event = await Event.findOne({ slug: eventId });
+    }
 
     if (!event) {
       return res.status(404).json({ success: false, message: 'Event not found.' });
@@ -131,17 +142,17 @@ exports.addToCart = async (req, res) => {
     if (packageType === 'flatPrice') {
       // For flat price, check if the same event with flat price is already in cart
       itemExists = user.customerProfile.customerCart.some(item => 
-        item.event.equals(eventId) && item.packageType === 'flatPrice'
+        item.event.equals(event._id) && item.packageType === 'flatPrice'
       );
     } else if (eventPackage.pricingMode === 'flatPrice') {
       // For flat price custom packages, check if the same custom package is already in cart
       // Allow different flat price custom packages for the same event
       itemExists = user.customerProfile.customerCart.some(item => 
-        item.event.equals(eventId) && item.packageType === packageType && item.package && item.package.equals(packageId)
+        item.event.equals(event._id) && item.packageType === packageType && item.package && item.package.equals(packageId)
       );
     } else {
       itemExists = user.customerProfile.customerCart.some(item => 
-        item.event.equals(eventId) && item.packageType === packageType && item.package && item.package.equals(packageId)
+        item.event.equals(event._id) && item.packageType === packageType && item.package && item.package.equals(packageId)
       );
     }
 
@@ -165,9 +176,10 @@ exports.addToCart = async (req, res) => {
     }
 
     const cartItem = {
-      event: eventId,
+      event: event._id, // Use the actual ObjectId from the found event
       packageType,
       eventDate,
+      eventTime,
       attendees: eventPackage.pricingMode === 'flatPrice' ? 1 : attendees,
       totalPrice: computedTotalPrice
     };
@@ -208,7 +220,7 @@ exports.addToCart = async (req, res) => {
 // @access  Private (Customers only)
 exports.updateCartItem = async (req, res) => {
   const { cartItemId } = req.params;
-  const { packageId, eventDate, attendees, totalPrice } = req.body;
+  const { packageId, eventDate, eventTime, attendees, totalPrice } = req.body;
   
   try {
     const user = await User.findById(req.user.id);
@@ -229,6 +241,7 @@ exports.updateCartItem = async (req, res) => {
 
     // Update other fields if provided
     if (eventDate) cartItem.eventDate = eventDate;
+    if (eventTime) cartItem.eventTime = eventTime;
     if (attendees) cartItem.attendees = attendees;
     if (totalPrice !== undefined) cartItem.totalPrice = totalPrice;
 

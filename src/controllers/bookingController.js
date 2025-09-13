@@ -33,11 +33,11 @@ const populatePackageDetails = async (booking) => {
 
 
 exports.bookEvent = catchAsync(async (req, res, next) => {
-    const { eventId, packageId, packageType, eventDate, attendees, totalPrice } = req.body;
+    const { eventId, packageId, packageType, eventDate, eventTime, attendees, totalPrice } = req.body;
     const customerId = req.user.id;
 
-    if (!eventId || !packageType || !eventDate || !attendees || totalPrice === undefined) {
-        return res.status(400).json({ success: false, message: 'Please provide eventId, packageType, eventDate, attendees, and totalPrice.' });
+    if (!eventId || !packageType || !eventDate || !eventTime || !attendees || totalPrice === undefined) {
+        return res.status(400).json({ success: false, message: 'Please provide eventId, packageType, eventDate, eventTime, attendees, and totalPrice.' });
     }
 
     // For flat price items, packageId is not required
@@ -49,7 +49,18 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'packageType must be either "regular", "custom", or "flatPrice".' });
     }
 
-    const event = await Event.findById(eventId);
+    // Handle both ObjectId and slug for event lookup
+    let event = null;
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+    
+    if (isValidObjectId) {
+        // If it's a valid ObjectId, search by ID
+        event = await Event.findById(eventId);
+    } else {
+        // If it's not a valid ObjectId, treat it as a slug
+        event = await Event.findOne({ slug: eventId });
+    }
+
     if (!event) {
         return res.status(404).json({ success: false, message: 'Event not found.' });
     }
@@ -83,9 +94,10 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
     const bookingData = {
         customer: customerId,
         vendor: event.vendor,
-        event: eventId,
+        event: event._id, // Use the actual ObjectId from the found event
         packageType,
         eventDate,
+        eventTime,
         attendees,
         totalPrice
     };
@@ -346,14 +358,14 @@ exports.getBookedVendors = catchAsync(async (req, res, next) => {
 // @route   POST /api/bookings/vendor-create
 // @access  Private (Vendor only)
 exports.createVendorBooking = catchAsync(async (req, res, next) => {
-    const { customerName, customerEmail, eventId, packageName, packageType, eventDate, attendees, totalPrice, status } = req.body;
+    const { customerName, customerEmail, eventId, packageName, packageType, eventDate, eventTime, attendees, totalPrice, status } = req.body;
     const vendorId = req.user.id;
 
     // Validation
-    if (!customerName || !customerEmail || !eventId || !packageName || !packageType || !eventDate || !attendees || totalPrice === undefined) {
+    if (!customerName || !customerEmail || !eventId || !packageName || !packageType || !eventDate || !eventTime || !attendees || totalPrice === undefined) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Please provide customerName, customerEmail, eventId, packageName, packageType, eventDate, attendees, and totalPrice.' 
+            message: 'Please provide customerName, customerEmail, eventId, packageName, packageType, eventDate, eventTime, attendees, and totalPrice.' 
         });
     }
 
@@ -362,7 +374,18 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
     }
 
     // Verify the event belongs to the vendor
-    const event = await Event.findById(eventId);
+    // Handle both ObjectId and slug for event lookup
+    let event = null;
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+    
+    if (isValidObjectId) {
+        // If it's a valid ObjectId, search by ID
+        event = await Event.findById(eventId);
+    } else {
+        // If it's not a valid ObjectId, treat it as a slug
+        event = await Event.findOne({ slug: eventId });
+    }
+
     if (!event) {
         return res.status(404).json({ success: false, message: 'Event not found.' });
     }
@@ -432,9 +455,10 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
     const bookingData = {
         customer: customer._id,
         vendor: vendorId,
-        event: eventId,
+        event: event._id, // Use the actual ObjectId from the found event
         packageType,
         eventDate,
+        eventTime,
         attendees,
         totalPrice,
         status: status || 'Pending'
