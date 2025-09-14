@@ -22,7 +22,9 @@ const notificationSchema = new mongoose.Schema({
       'system',            // System notifications
       'reminder',          // Reminders
       'event_update',      // Event updates
-      'vendor_inquiry'     // Vendor inquiry
+      'vendor_inquiry',    // Vendor inquiry
+      'cart_added',        // Event added to cart
+      'cart_removed'       // Event removed from cart
     ],
     required: true,
     index: true
@@ -142,6 +144,118 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
   return notification;
 };
 
+// Static method to create a cart notification
+notificationSchema.statics.createCartNotification = async function(cartData) {
+  const { customerId, eventId, packageType, eventDate, eventTime, attendees, totalPrice } = cartData;
+  
+  // Get customer details
+  const customer = await mongoose.model('User').findById(customerId).select('customerProfile.fullName customerProfile.email');
+  
+  // Get event details
+  const event = await mongoose.model('Event').findById(eventId).select('name vendor imageUrls');
+  
+  if (!customer || !event) {
+    throw new Error('Customer or event not found');
+  }
+  
+  const customerName = customer.customerProfile?.fullName || 'Unknown Customer';
+  const eventName = event.name;
+  const vendorId = event.vendor;
+  
+  // Get package details for the message
+  let packageInfo = '';
+  if (packageType === 'flatPrice') {
+    packageInfo = 'Flat Price Package';
+  } else if (packageType === 'regular') {
+    packageInfo = 'Regular Package';
+  } else if (packageType === 'custom') {
+    packageInfo = 'Custom Package';
+  }
+  
+  const notificationData = {
+    recipient: vendorId,
+    sender: customerId,
+    type: 'cart_added',
+    title: 'Event Added to Cart',
+    message: `${customerName} added "${eventName}" (${packageInfo}) to their cart`,
+    data: {
+      customerId: customerId,
+      customerName: customerName,
+      customerEmail: customer.customerProfile?.email,
+      eventId: eventId,
+      eventName: eventName,
+      eventImage: event.imageUrls?.[0],
+      packageType: packageType,
+      eventDate: eventDate,
+      eventTime: eventTime,
+      attendees: attendees,
+      totalPrice: totalPrice
+    },
+    actionUrl: `/profile_listing?tab=Messages&customerId=${customerId}`,
+    priority: 'medium'
+  };
+  
+  const notification = await this.create(notificationData);
+  
+  return notification;
+};
+
+// Static method to create a cart removal notification
+notificationSchema.statics.createCartRemovalNotification = async function(cartData) {
+  const { customerId, eventId, packageType, eventDate, eventTime, attendees, totalPrice } = cartData;
+  
+  // Get customer details
+  const customer = await mongoose.model('User').findById(customerId).select('customerProfile.fullName customerProfile.email');
+  
+  // Get event details
+  const event = await mongoose.model('Event').findById(eventId).select('name vendor imageUrls');
+  
+  if (!customer || !event) {
+    throw new Error('Customer or event not found');
+  }
+  
+  const customerName = customer.customerProfile?.fullName || 'Unknown Customer';
+  const eventName = event.name;
+  const vendorId = event.vendor;
+  
+  // Get package details for the message
+  let packageInfo = '';
+  if (packageType === 'flatPrice') {
+    packageInfo = 'Flat Price Package';
+  } else if (packageType === 'regular') {
+    packageInfo = 'Regular Package';
+  } else if (packageType === 'custom') {
+    packageInfo = 'Custom Package';
+  }
+  
+  const notificationData = {
+    recipient: vendorId,
+    sender: customerId,
+    type: 'cart_removed',
+    title: 'Event Removed from Cart',
+    message: `${customerName} removed "${eventName}" (${packageInfo}) from their cart`,
+    data: {
+      customerId: customerId,
+      customerName: customerName,
+      customerEmail: customer.customerProfile?.email,
+      eventId: eventId,
+      eventName: eventName,
+      eventImage: event.imageUrls?.[0],
+      packageType: packageType,
+      eventDate: eventDate,
+      eventTime: eventTime,
+      attendees: attendees,
+      totalPrice: totalPrice
+    },
+    actionUrl: `/profile_listing?tab=Messages&customerId=${customerId}`,
+    priority: 'low'
+  };
+  
+  const notification = await this.create(notificationData);
+  
+  return notification;
+};
+
 // Static method to get unread count for a user
 notificationSchema.statics.getUnreadCount = function(userId) {
   return this.countDocuments({
@@ -165,7 +279,12 @@ notificationSchema.statics.getNotifications = function(userId, { page = 1, limit
   };
 
   if (type) {
-    query.type = type;
+    // Support comma-separated types for multiple notification types
+    if (type.includes(',')) {
+      query.type = { $in: type.split(',').map(t => t.trim()) };
+    } else {
+      query.type = type;
+    }
   }
 
   if (unreadOnly) {

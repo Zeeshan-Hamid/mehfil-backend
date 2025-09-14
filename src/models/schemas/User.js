@@ -721,7 +721,30 @@ userSchema.pre("save", function (next) {
       businessAddress &&
       businessAddress.zipCode
     ) {
+      // Check if this is a profile completion (was false, now becoming true)
+      const wasProfileIncomplete = !this.vendorProfile.profileCompleted;
       this.vendorProfile.profileCompleted = true;
+      
+      // Send admin notification if this is a Google OAuth vendor completing their profile
+      if (wasProfileIncomplete && this.authProvider === 'google') {
+        // Use setImmediate to avoid blocking the save operation
+        setImmediate(async () => {
+          try {
+            const EmailService = require('../../services/emailService');
+            await EmailService.sendNewVendorSignupNotificationEmail({
+              vendorEmail: this.email,
+              vendorName: this.vendorProfile.ownerName,
+              businessName: this.vendorProfile.businessName,
+              phoneNumber: this.phoneNumber,
+              businessAddress: this.vendorProfile.businessAddress,
+              signupMethod: 'google'
+            });
+          } catch (error) {
+            console.error('Failed to send admin notification for Google vendor profile completion:', error);
+            // Don't fail the save operation if email fails
+          }
+        });
+      }
       
     } else {
       this.vendorProfile.profileCompleted = false;
