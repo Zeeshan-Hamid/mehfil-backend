@@ -6,7 +6,9 @@ const {
   trackView, 
   getVendorViewAnalytics, 
   getVendorViewCount, 
-  aggregateViews 
+  aggregateViews,
+  getTopCustomers,
+  getAllVendorsTopCustomers
 } = require('../../controllers/viewTrackingController');
 
 // Public route for tracking views
@@ -17,8 +19,10 @@ router.use('/vendor', protect, restrictTo('vendor'));
 router.get('/vendor', getVendorAnalytics);
 router.get('/vendor/views', getVendorViewAnalytics);
 router.get('/vendor/view-count', getVendorViewCount);
+router.get('/vendor/top-customers', getTopCustomers);
 
-// Admin route for manual aggregation
+// Admin routes
+router.get('/admin/top-customers', protect, restrictTo('admin'), getAllVendorsTopCustomers);
 router.post('/aggregate-views', protect, restrictTo('admin'), aggregateViews);
 
 // Test route for manual aggregation (remove in production)
