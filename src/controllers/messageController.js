@@ -85,8 +85,18 @@ exports.getConversation = catchAsync(async (req, res) => {
   const currentUserId = req.user.id;
   
   try {
-    // Validate event exists
-    const event = await Event.findById(eventId);
+    // Handle both ObjectId and slug for event lookup
+    let event = null;
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+    
+    if (isValidObjectId) {
+      // If it's a valid ObjectId, search by ID
+      event = await Event.findById(eventId);
+    } else {
+      // If it's not a valid ObjectId, treat it as a slug
+      event = await Event.findOne({ slug: eventId });
+    }
+    
     if (!event) {
       
       return res.status(404).json({
@@ -189,8 +199,21 @@ exports.sendMessage = catchAsync(async (req, res) => {
         }
 
         // If eventId is provided, validate it exists (for backward compatibility)
+        let actualEventId = null;
         if (eventId) {
-            const event = await Event.findById(eventId);
+            let event = null;
+            const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+            
+            if (isValidObjectId) {
+                // If it's a valid ObjectId, search by ID
+                event = await Event.findById(eventId);
+                actualEventId = eventId; // Use the original eventId if it's already an ObjectId
+            } else {
+                // If it's not a valid ObjectId, treat it as a slug
+                event = await Event.findOne({ slug: eventId });
+                actualEventId = event ? event._id : null; // Use the actual ObjectId from the found event
+            }
+            
             if (!event) {
                 
                 return res.status(404).json({
@@ -200,7 +223,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
             }
         }
 
-        const conversationId = Message.generateConversationId(senderId, receiverId, eventId);
+        const conversationId = Message.generateConversationId(senderId, receiverId, actualEventId);
         
         let messageContent = content;
         let messageType = requestedMessageType || 'text';
@@ -301,8 +324,8 @@ exports.sendMessage = catchAsync(async (req, res) => {
         }
 
         // Add eventId only if provided (for backward compatibility)
-        if (eventId) {
-            messageData.eventId = eventId;
+        if (actualEventId) {
+            messageData.eventId = actualEventId;
         }
 
         const newMessage = await Message.create(messageData);
