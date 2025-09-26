@@ -234,6 +234,101 @@ class EmailService {
     }
   }
 
+  static async sendNewVendorSignupNotificationEmail({ 
+    vendorEmail, 
+    vendorName, 
+    businessName, 
+    phoneNumber, 
+    businessAddress, 
+    signupMethod 
+  }) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'info@mehfil.app';
+    const title = '🎉 New Vendor Signup - Action Required';
+
+    const vendorDetails = `
+      <div style="background-color: #f0f8ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976d2;">
+        <h3 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">👤 Vendor Information</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <div style="margin-bottom: 8px;"><strong>Business Name:</strong> ${businessName || 'Not provided'}</div>
+          <div style="margin-bottom: 8px;"><strong>Owner Name:</strong> ${vendorName || 'Not provided'}</div>
+          <div style="margin-bottom: 8px;"><strong>Email:</strong> ${vendorEmail}</div>
+          <div style="margin-bottom: 8px;"><strong>Phone:</strong> ${phoneNumber || 'Not provided'}</div>
+          <div style="margin-bottom: 8px;"><strong>Signup Method:</strong> ${signupMethod === 'google' ? 'Google OAuth' : 'Email Registration'}</div>
+        </div>
+      </div>
+    `;
+
+    const addressDetails = `
+      <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #6c757d;">
+        <h3 style="color: #6c757d; margin: 0 0 15px 0; font-size: 18px;">📍 Business Address</h3>
+        <div style="color: #333; line-height: 1.6;">
+          ${businessAddress ? `
+            <div style="margin-bottom: 4px;">${businessAddress.street || ''}</div>
+            <div style="margin-bottom: 4px;">${businessAddress.city || ''}, ${businessAddress.state || ''} ${businessAddress.zipCode || ''}</div>
+            <div style="margin-bottom: 4px;">${businessAddress.country || 'United States'}</div>
+          ` : '<div style="color: #999; font-style: italic;">Address not provided</div>'}
+        </div>
+      </div>
+    `;
+
+    const nextSteps = `
+      <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f57c00;">
+        <h3 style="color: #f57c00; margin: 0 0 15px 0; font-size: 18px;">📋 Next Steps</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <p style="margin: 0 0 10px 0;">A new vendor has signed up and requires your attention:</p>
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li style="margin-bottom: 5px;">Review the vendor's information and profile</li>
+            <li style="margin-bottom: 5px;">Verify their business details and documentation</li>
+            <li style="margin-bottom: 5px;">Approve or reject their vendor application</li>
+            <li style="margin-bottom: 5px;">Send welcome email with onboarding instructions</li>
+          </ul>
+        </div>
+      </div>
+    `;
+
+    const content = `
+      <p style="text-align:left;">Hello Admin,</p>
+      <p style="text-align:left;">A new vendor has successfully signed up on Mehfil and is awaiting your review and approval.</p>
+      
+      ${vendorDetails}
+      ${addressDetails}
+      ${nextSteps}
+      
+      <p style="text-align:left; color:#777; font-size:14px; margin-top: 25px;">
+        <strong>Important:</strong> Please review this vendor's application promptly to ensure a smooth onboarding experience.
+      </p>
+      
+      <p style="text-align:left; color:#777; font-size:13px; margin-top: 20px;">
+        You can manage vendors and view their profiles in your <strong>Admin Dashboard</strong>.
+      </p>
+    `;
+
+    const button = { 
+      text: 'View Admin Dashboard', 
+      url: `${frontendUrl}/admin` 
+    };
+
+    const html = emailTemplate(title, content, button);
+
+    const message = {
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      to: adminEmail,
+      subject: `New Vendor Signup: ${businessName || vendorName || vendorEmail} - Mehfil`,
+      html,
+    };
+
+    try {
+      const info = await transporter.sendMail(message);
+      console.log('✅ New vendor signup notification sent to admin:', adminEmail);
+      return true;
+    } catch (error) {
+      console.error('❌ Error sending new vendor signup notification:', error);
+      // Do not throw to avoid failing signup flow
+      return false;
+    }
+  }
+
   static async sendCancellationRequestEmail({ 
     vendorEmail, 
     vendorName, 

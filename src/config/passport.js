@@ -168,6 +168,10 @@ module.exports = function(passport) {
           }
 
           await newUser.save({ validateBeforeSave: false });
+          
+          // Note: Admin notification for Google OAuth vendors will be sent when they complete their profile
+          // This is because Google OAuth vendors start with incomplete profiles and need to complete onboarding
+          
           // Add profileCompleted to the response
           const newUserResponse = newUser.toObject();
           newUserResponse.profileCompleted = role === 'customer' ? 

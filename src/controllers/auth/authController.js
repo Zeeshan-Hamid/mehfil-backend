@@ -201,6 +201,21 @@ const signupVendor = async (req, res) => {
     const origin = `${req.protocol}://${req.get('host')}`;
     await EmailService.sendVerificationEmail(email, token, origin);
 
+    // Send admin notification email
+    try {
+      await EmailService.sendNewVendorSignupNotificationEmail({
+        vendorEmail: email,
+        vendorName: ownerName,
+        businessName: businessName,
+        phoneNumber: phoneNumber,
+        businessAddress: newVendor.vendorProfile.businessAddress,
+        signupMethod: 'email'
+      });
+    } catch (error) {
+      console.error('Failed to send admin notification for new vendor signup:', error);
+      // Don't fail the signup process if admin notification fails
+    }
+
     // Remove password and unwanted profiles from response
     const vendorResponse = newVendor.toObject();
     delete vendorResponse.password;

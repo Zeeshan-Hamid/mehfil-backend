@@ -202,6 +202,31 @@ exports.addToCart = async (req, res) => {
 
     await user.save();
 
+    // Create notification for vendor
+    try {
+      const Notification = require('../models/Notification');
+      const cartData = {
+        customerId: req.user.id,
+        eventId: event._id,
+        packageType,
+        eventDate,
+        eventTime,
+        attendees: eventPackage.pricingMode === 'flatPrice' ? 1 : attendees,
+        totalPrice: computedTotalPrice
+      };
+      
+      const notification = await Notification.createCartNotification(cartData);
+      
+      // Broadcast notification via socket if available
+      const socketService = req.app.get('socketService');
+      if (socketService) {
+        socketService.broadcastNotification(notification);
+      }
+    } catch (notificationError) {
+      console.error('Failed to create cart notification:', notificationError);
+      // Don't fail the cart operation if notification fails
+    }
+
     res.status(201).json({
       success: true,
       message: 'Item added to cart successfully.',
@@ -273,6 +298,18 @@ exports.removeFromCart = async (req, res) => {
     const cart = user.customerProfile.customerCart;
     const initialLength = cart.length;
 
+    // Find the cart item before removing it to get details for notification
+    const cartItem = cart.id(cartItemId);
+    if (!cartItem) {
+        return res.status(404).json({ success: false, message: 'Cart item not found.' });
+    }
+
+    // Get event details for notification
+    const event = await Event.findById(cartItem.event).select('name vendor imageUrls');
+    if (!event) {
+        return res.status(404).json({ success: false, message: 'Event not found.' });
+    }
+
     // Use the .pull() method which is the correct way to remove a subdocument
     cart.pull(cartItemId);
 
@@ -282,6 +319,31 @@ exports.removeFromCart = async (req, res) => {
     }
 
     await user.save();
+
+    // Create notification for vendor about cart removal
+    try {
+      const Notification = require('../models/Notification');
+      const cartData = {
+        customerId: req.user.id,
+        eventId: cartItem.event,
+        packageType: cartItem.packageType,
+        eventDate: cartItem.eventDate,
+        eventTime: cartItem.eventTime,
+        attendees: cartItem.attendees,
+        totalPrice: cartItem.totalPrice
+      };
+      
+      const notification = await Notification.createCartRemovalNotification(cartData);
+      
+      // Broadcast notification via socket if available
+      const socketService = req.app.get('socketService');
+      if (socketService) {
+        socketService.broadcastNotification(notification);
+      }
+    } catch (notificationError) {
+      console.error('Failed to create cart removal notification:', notificationError);
+      // Don't fail the cart operation if notification fails
+    }
 
     res.status(200).json({
         success: true,

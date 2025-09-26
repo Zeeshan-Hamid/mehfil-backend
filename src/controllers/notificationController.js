@@ -33,7 +33,14 @@ exports.getNotifications = catchAsync(async (req, res) => {
       ]
     };
     
-    if (type) query.type = type;
+    if (type) {
+      // Support comma-separated types for multiple notification types
+      if (type.includes(',')) {
+        query.type = { $in: type.split(',').map(t => t.trim()) };
+      } else {
+        query.type = type;
+      }
+    }
     if (unreadOnly === 'true') query.isRead = false;
     
     const totalCount = await Notification.countDocuments(query);
@@ -274,6 +281,59 @@ exports.createNotification = catchAsync(async (req, res) => {
   }
 });
 
+// @desc    Create a cart notification when event is added to cart
+// @route   POST /api/notifications/cart
+// @access  Private (Customers only)
+exports.createCartNotification = catchAsync(async (req, res) => {
+  const { eventId, packageType, eventDate, eventTime, attendees, totalPrice } = req.body;
+  const customerId = req.user.id;
+  
+  try {
+    if (!eventId || !packageType || !eventDate || !eventTime || !attendees || totalPrice === undefined) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Missing required fields: eventId, packageType, eventDate, eventTime, attendees, totalPrice'
+      });
+    }
+    
+    // Only customers can add items to cart
+    if (req.user.role !== 'customer') {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Only customers can add items to cart'
+      });
+    }
+    
+    const cartData = {
+      customerId,
+      eventId,
+      packageType,
+      eventDate,
+      eventTime,
+      attendees,
+      totalPrice
+    };
+    
+    const notification = await Notification.createCartNotification(cartData);
+    
+    // Broadcast notification via socket if available
+    const socketService = req.app.get('socketService');
+    if (socketService) {
+      socketService.broadcastNotification(notification);
+    }
+    
+    res.status(201).json({
+      status: 'success',
+      data: {
+        notification
+      }
+    });
+  } catch (error) {
+    console.error('Create cart notification error:', error);
+    throw error;
+  }
+});
+
 module.exports = {
   getNotifications: exports.getNotifications,
   getUnreadCount: exports.getUnreadCount,
@@ -281,5 +341,6 @@ module.exports = {
   markMultipleAsRead: exports.markMultipleAsRead,
   deleteNotification: exports.deleteNotification,
   bulkDeleteNotifications: exports.bulkDeleteNotifications,
-  createNotification: exports.createNotification
+  createNotification: exports.createNotification,
+  createCartNotification: exports.createCartNotification
 };

@@ -9,7 +9,8 @@ const {
   markMultipleAsRead,
   deleteNotification,
   bulkDeleteNotifications,
-  createNotification
+  createNotification,
+  createCartNotification
 } = require('../../controllers/notificationController');
 
 // All routes are protected
@@ -39,6 +40,11 @@ router.delete('/bulk-delete', bulkDeleteNotifications);
 // @desc    Create a notification
 // @access  Private
 router.post('/', createNotification);
+
+// @route   POST /api/notifications/cart
+// @desc    Create a cart notification when event is added to cart
+// @access  Private (Customers only)
+router.post('/cart', createCartNotification);
 
 // @route   PATCH /api/notifications/:id/read
 // @desc    Mark notification as read
