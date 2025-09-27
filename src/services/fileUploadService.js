@@ -354,3 +354,48 @@ exports.processAndUploadPromotionalEventImages = async (files, adminId) => {
         throw new Error('Failed to process and upload promotional event images');
     }
 };
+
+// 8. Blog Images Upload Logic
+exports.processAndUploadBlogImages = async (files, adminId) => {
+    try {
+        const uploadedUrls = await Promise.all(
+            files.map(async (file, index) => {
+                // Create a unique filename for the optimized blog image
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + index;
+                const newFilename = `blogs/${adminId}-${uniqueSuffix}.webp`;
+
+                // Process the image: resize and convert to WebP with optimized settings
+                const processedBuffer = await sharp(file.buffer)
+                    .resize({ 
+                        width: 1200, 
+                        height: 800, 
+                        fit: 'inside', 
+                        withoutEnlargement: true 
+                    }) // Resize to max dimensions for blog images
+                    .webp({ 
+                        quality: 85,
+                        effort: 4, // Higher compression effort for smaller file size
+                        nearLossless: false // Better compression
+                    }) // Convert to WebP with 85% quality
+                    .toBuffer();
+
+                // Upload to S3
+                await s3.upload({
+                    Bucket: process.env.S3_BUCKET_NAME,
+                    Key: newFilename,
+                    Body: processedBuffer,
+                    ContentType: 'image/webp',
+                    CacheControl: 'public, max-age=31536000' // Cache for 1 year
+                }).promise();
+
+                // Return the public URL of the uploaded file
+                return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${newFilename}`;
+            })
+        );
+
+        return uploadedUrls;
+    } catch (error) {
+        console.error('❌ [FileUploadService] Error processing/uploading blog images:', error);
+        throw new Error('Failed to process and upload blog images');
+    }
+};
