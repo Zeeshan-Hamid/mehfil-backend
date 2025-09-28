@@ -130,8 +130,6 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((error, req, res, next) => {
-  console.error('Global error handler:', error);
-  
   res.status(error.status || 500).json({
     success: false,
     message: error.message || 'Internal server error',
@@ -142,10 +140,8 @@ app.use((error, req, res, next) => {
 
 // Start server
 server.listen(PORT, () => {
-  
-  
-  
-  
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 module.exports = app;

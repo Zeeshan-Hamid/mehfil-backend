@@ -11,7 +11,7 @@ const connectDB = async () => {
     });
 
     mongoose.connection.on('disconnected', () => {
-      
+      console.log('MongoDB disconnected');
     });
     // just using this method for graceful shutdown and not show tons of errors
     process.on('SIGINT', async () => {

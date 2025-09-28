@@ -46,7 +46,7 @@ exports.getCurrentVendorProfile = catchAsync(async (req, res, next) => {
   const vendorId = req.user.id;
 
   const vendor = await User.findById(vendorId).select(
-    'email phoneNumber vendorProfile'
+    'email phoneNumber vendorProfile vendorVerificationStatus vendorVerificationDate vendorVerificationNotes'
   );
 
   if (!vendor) {
@@ -104,7 +104,7 @@ exports.updateVendorGeneralProfile = catchAsync(async (req, res, next) => {
       const vendorProfileImageUrl = await processAndUploadProfileImage(profileImageFile, vendorId);
       updateData.vendorProfileImage = vendorProfileImageUrl;
     } catch (error) {
-      console.error('Error uploading vendor profile image:', error);
+      // Error uploading vendor profile image
       return res.status(500).json({
         status: 'fail',
         message: 'Failed to upload vendor profile image'
@@ -148,7 +148,7 @@ exports.updateVendorGeneralProfile = catchAsync(async (req, res, next) => {
         updateData.halalCertificationFile = certificationFileUrl;
       }
     } catch (error) {
-      console.error('Error uploading halal certification file:', error);
+      // Error uploading halal certification file
       return res.status(500).json({
         status: 'fail',
         message: 'Failed to upload halal certification file'
@@ -176,7 +176,7 @@ exports.updateVendorGeneralProfile = catchAsync(async (req, res, next) => {
       try {
         addressData = JSON.parse(addressData);
       } catch (error) {
-        console.error('Error parsing business address data:', error);
+        // Error parsing business address data
       }
     }
     
@@ -230,17 +230,23 @@ exports.updateVendorGeneralProfile = catchAsync(async (req, res, next) => {
   }
 
   // Save the vendor
+  // Saving vendor profile
+  
   await vendor.save();
+  // Vendor profile saved successfully
 
   res.status(200).json({
     status: 'success',
     message: 'Vendor profile updated successfully',
     data: {
-      vendor: {
+      user: {
         _id: vendor._id,
         email: vendor.email,
         phoneNumber: vendor.phoneNumber,
-        vendorProfile: vendor.vendorProfile
+        vendorProfile: vendor.vendorProfile,
+        vendorVerificationStatus: vendor.vendorVerificationStatus,
+        vendorVerificationDate: vendor.vendorVerificationDate,
+        vendorVerificationNotes: vendor.vendorVerificationNotes
       }
     }
   });

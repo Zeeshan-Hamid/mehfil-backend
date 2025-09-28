@@ -96,11 +96,7 @@ Remember: You are Mehfil's vendor assistant only. Stay focused on helping vendor
     });
 
   } catch (error) {
-    console.error('Chatbot API error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
+    // Chatbot API error details
     
     res.status(500).json({
       success: false,
@@ -112,12 +108,7 @@ Remember: You are Mehfil's vendor assistant only. Stay focused on helping vendor
 
 const customerChatbot = async (req, res) => {
   try {
-    console.log('Customer chatbot request received:', {
-      method: req.method,
-      url: req.url,
-      body: req.body,
-      user: req.user
-    });
+    // Customer chatbot request received
 
     const { message } = req.body;
 

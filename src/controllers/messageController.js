@@ -70,7 +70,7 @@ exports.getConversations = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [MessageController] Error getting conversations:', error);
+    // Error getting conversations
     throw error;
   }
 });
@@ -156,7 +156,7 @@ exports.getConversation = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [MessageController] Error getting conversation:', error);
+    // Error getting conversation
     throw error;
   }
 });
@@ -271,7 +271,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
                     });
                 }
             } catch (uploadError) {
-                console.error('❌ [MessageController] Multiple file upload failed:', uploadError);
+                // Multiple file upload failed
                 return res.status(500).json({
                     status: 'error',
                     message: 'Failed to upload files'
@@ -294,7 +294,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
                     
                 }
             } catch (uploadError) {
-                console.error('❌ [MessageController] Single file upload failed:', uploadError);
+                // Single file upload failed
                 return res.status(500).json({
                     status: 'error',
                     message: 'Failed to upload file'
@@ -385,7 +385,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
                     });
                 }
             } catch (emailError) {
-                console.error('❌ [MessageController] Error sending cancellation email:', emailError);
+                // Error sending cancellation email
                 // Don't fail the message sending if email fails
             }
         }
@@ -409,7 +409,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
                 
             }
         } catch (notificationError) {
-            console.error('❌ [MessageController] Error creating notification:', notificationError);
+            // Error creating notification
             // Still broadcast the message even if notification fails
             if (socketService) {
                 socketService.broadcastMessage(newMessage);
@@ -423,7 +423,7 @@ exports.sendMessage = catchAsync(async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ [MessageController] Error sending message:', error);
+        // Error sending message
         throw error;
     }
 });
@@ -459,7 +459,7 @@ exports.markAsRead = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [MessageController] Error marking messages as read:', error);
+    // Error marking messages as read
     throw error;
   }
 });
@@ -483,7 +483,7 @@ exports.getUnreadCount = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [MessageController] Error getting unread count:', error);
+    // Error getting unread count
     throw error;
   }
 });
@@ -516,7 +516,7 @@ exports.deleteConversation = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [MessageController] Error deleting conversation:', error);
+    // Error deleting conversation
     throw error;
   }
 });
@@ -594,7 +594,7 @@ exports.getVendorConversation = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [MessageController] Error getting vendor conversation:', error);
+    // Error getting vendor conversation
     throw error;
   }
 });
@@ -681,7 +681,7 @@ exports.getCustomerConversation = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [MessageController] Error getting customer conversation:', error);
+    // Error getting customer conversation
     throw error;
   }
 });

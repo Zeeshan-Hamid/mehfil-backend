@@ -70,7 +70,7 @@ exports.getCart = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Get Cart Error:', error);
+    // Get Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
@@ -223,7 +223,7 @@ exports.addToCart = async (req, res) => {
         socketService.broadcastNotification(notification);
       }
     } catch (notificationError) {
-      console.error('Failed to create cart notification:', notificationError);
+      // Failed to create cart notification
       // Don't fail the cart operation if notification fails
     }
 
@@ -236,7 +236,7 @@ exports.addToCart = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Add to Cart Error:', error);
+    // Add to Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
@@ -282,7 +282,7 @@ exports.updateCartItem = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update Cart Error:', error);
+    // Update Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
@@ -341,7 +341,7 @@ exports.removeFromCart = async (req, res) => {
         socketService.broadcastNotification(notification);
       }
     } catch (notificationError) {
-      console.error('Failed to create cart removal notification:', notificationError);
+      // Failed to create cart removal notification
       // Don't fail the cart operation if notification fails
     }
 
@@ -351,7 +351,7 @@ exports.removeFromCart = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Remove From Cart Error:', error);
+    // Remove From Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 }; 

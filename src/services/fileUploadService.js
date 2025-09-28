@@ -72,7 +72,7 @@ exports.processAndUploadImages = async (files, userId) => {
 
     return uploadedUrls;
   } catch (error) {
-    console.error('❌ [FileUploadService] Error processing/uploading event images:', error);
+    // Error processing/uploading event images
     throw new Error('Failed to process and upload images');
   }
 };
@@ -119,7 +119,7 @@ exports.processAndUploadMessageImage = async (file, userId, conversationId) => {
 
         return imageUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading message image:', error);
+        // Error processing/uploading message image
         throw new Error('Failed to process and upload image');
     }
 };
@@ -176,7 +176,7 @@ exports.processAndUploadMultipleMessageImages = async (files, userId, conversati
         
         return uploadedUrls;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading multiple message images:', error);
+        // Error processing/uploading multiple message images
         throw new Error('Failed to process and upload images');
     }
 };
@@ -209,7 +209,7 @@ exports.uploadMessageDocument = async (file, userId, conversationId) => {
 
         return documentUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error uploading message document:', error);
+        // Error uploading message document
         throw new Error('Failed to upload document');
     }
 };
@@ -256,7 +256,7 @@ exports.processAndUploadProfileImage = async (file, userId) => {
 
         return imageUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading profile image:', error);
+        // Error processing/uploading profile image
         throw new Error('Failed to process and upload profile image');
     }
 };
@@ -305,7 +305,7 @@ exports.processAndUploadBusinessLogo = async (file, userId) => {
 
         return imageUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading business logo:', error);
+        // Error processing/uploading business logo
         throw new Error('Failed to process and upload business logo');
     }
 };
@@ -350,7 +350,7 @@ exports.processAndUploadPromotionalEventImages = async (files, adminId) => {
 
         return uploadedUrls;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading promotional event images:', error);
+        // Error processing/uploading promotional event images
         throw new Error('Failed to process and upload promotional event images');
     }
 };
@@ -395,7 +395,7 @@ exports.processAndUploadBlogImages = async (files, adminId) => {
 
         return uploadedUrls;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading blog images:', error);
+        // Error processing/uploading blog images
         throw new Error('Failed to process and upload blog images');
     }
 };

@@ -140,7 +140,7 @@ exports.bookEvent = catchAsync(async (req, res, next) => {
         );
     } catch (cartError) {
         // Log the error but don't fail the booking creation
-        console.error('Error removing item from cart:', cartError);
+        // Error removing item from cart
         // Continue with booking creation even if cart removal fails
     }
 
@@ -297,7 +297,7 @@ exports.getBookedVendors = catchAsync(async (req, res, next) => {
                     event: event
                 };
             } catch (error) {
-                console.error('Error populating booking details:', error);
+                // Error populating booking details
                 return booking;
             }
         })
@@ -309,13 +309,13 @@ exports.getBookedVendors = catchAsync(async (req, res, next) => {
     populatedBookings.forEach(booking => {
         // Skip bookings with null or undefined vendor
         if (!booking.vendor || !booking.vendor._id) {
-            console.warn('Skipping booking with null/undefined vendor:', booking._id);
+            // Skipping booking with null/undefined vendor
             return;
         }
         
         // Skip if vendor is not actually a vendor
         if (booking.vendor.role !== 'vendor') {
-            console.warn('Skipping booking with non-vendor user:', booking._id);
+            // Skipping booking with non-vendor user
             return;
         }
         

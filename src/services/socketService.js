@@ -172,7 +172,7 @@ class SocketService {
        
         
       } catch (notificationError) {
-        console.error('❌ [SocketService] Error creating notification:', notificationError);
+        // Error creating notification
         
       }
 
@@ -226,8 +226,7 @@ class SocketService {
       
 
     } catch (error) {
-      console.error('❌ [SocketService] Error in broadcastMessage:', error);
-      console.error('❌ [SocketService] Error stack:', error.stack);
+      // Error in broadcastMessage
     }
   }
 
@@ -293,7 +292,7 @@ class SocketService {
       });
 
     } catch (error) {
-      console.error('❌ [SocketService] Error marking messages as read:', error);
+      // Error marking messages as read
     }
   }
 

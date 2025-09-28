@@ -93,7 +93,7 @@ exports.createBlog = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error creating blog:', error);
+    // Error creating blog
     res.status(500).json({
       status: 'error',
       message: 'Failed to create blog post.',
@@ -121,7 +121,7 @@ exports.uploadFeaturedImage = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error uploading featured image:', error);
+    // Error uploading featured image
     res.status(500).json({
       status: 'error',
       message: 'Failed to upload featured image.',
@@ -149,7 +149,7 @@ exports.uploadMultipleImages = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error uploading images:', error);
+    // Error uploading images
     res.status(500).json({
       status: 'error',
       message: 'Failed to upload images.',
@@ -177,7 +177,7 @@ exports.uploadEmbeddedMedia = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error uploading embedded media:', error);
+    // Error uploading embedded media
     res.status(500).json({
       status: 'error',
       message: 'Failed to upload embedded media.',
@@ -243,7 +243,7 @@ exports.getAllBlogs = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching blogs:', error);
+    // Error fetching blogs
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch blogs.',
@@ -277,7 +277,7 @@ exports.getBlogBySlug = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching blog:', error);
+    // Error fetching blog
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch blog post.',
@@ -326,7 +326,7 @@ exports.updateBlog = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error updating blog:', error);
+    // Error updating blog
     res.status(500).json({
       status: 'error',
       message: 'Failed to update blog post.',
@@ -354,7 +354,7 @@ exports.deleteBlog = async (req, res) => {
       message: 'Blog post deleted successfully.'
     });
   } catch (error) {
-    console.error('Error deleting blog:', error);
+    // Error deleting blog
     res.status(500).json({
       status: 'error',
       message: 'Failed to delete blog post.',
@@ -407,7 +407,7 @@ exports.addComment = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error adding comment:', error);
+    // Error adding comment
     res.status(500).json({
       status: 'error',
       message: 'Failed to add comment.',
@@ -448,7 +448,7 @@ exports.approveComment = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error approving comment:', error);
+    // Error approving comment
     res.status(500).json({
       status: 'error',
       message: 'Failed to approve comment.',
@@ -494,7 +494,7 @@ exports.deleteComment = async (req, res) => {
       message: 'Comment deleted successfully.'
     });
   } catch (error) {
-    console.error('Error deleting comment:', error);
+    // Error deleting comment
     res.status(500).json({
       status: 'error',
       message: 'Failed to delete comment.',
@@ -527,7 +527,7 @@ exports.toggleFeatured = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error toggling featured status:', error);
+    // Error toggling featured status
     res.status(500).json({
       status: 'error',
       message: 'Failed to toggle featured status.',
@@ -560,7 +560,7 @@ exports.togglePinned = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error toggling pinned status:', error);
+    // Error toggling pinned status
     res.status(500).json({
       status: 'error',
       message: 'Failed to toggle pinned status.',
@@ -618,7 +618,7 @@ exports.getBlogStats = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching blog stats:', error);
+    // Error fetching blog stats
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch blog statistics.',
@@ -681,7 +681,7 @@ exports.getPublishedBlogs = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching published blogs:', error);
+    // Error fetching published blogs
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch blogs.',
@@ -717,7 +717,7 @@ exports.getPublicBlogBySlug = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching blog:', error);
+    // Error fetching blog
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch blog.',
@@ -765,7 +765,7 @@ exports.getRelatedBlogs = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching related blogs:', error);
+    // Error fetching related blogs
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch related blogs.',
@@ -815,7 +815,7 @@ exports.addPublicComment = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error adding comment:', error);
+    // Error adding comment
     res.status(500).json({
       status: 'error',
       message: 'Failed to add comment.',
@@ -869,7 +869,7 @@ exports.toggleBlogLike = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error toggling blog like:', error);
+    // Error toggling blog like
     res.status(500).json({
       status: 'error',
       message: 'Failed to toggle like.',

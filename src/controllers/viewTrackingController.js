@@ -13,19 +13,10 @@ exports.trackView = catchAsync(async (req, res, next) => {
   const { vendorId, eventId, userId } = req.body;
   const timestamp = new Date().toISOString();
   
-  console.log(`------------ VIEW TRACKING REQUEST [${timestamp}] ------------`);
-  console.log(`📥 [Controller] Track view request received at ${timestamp}:`, {
-    vendorId,
-    eventId,
-    userId: userId || 'not-provided',
-    ip: req.ip || req.connection.remoteAddress || 'unknown',
-    userAgent: req.get('User-Agent')?.substring(0, 50) + '...',
-    viewerId: req.user?.id || 'anonymous'
-  });
+  // Track view request received
 
   if (!vendorId) {
-    console.log('❌ [Controller] Missing vendorId in request');
-    console.log('------------ VIEW TRACKING REQUEST END ------------');
+    // Missing vendorId in request
     return res.status(400).json({
       success: false,
       message: 'vendorId is required'
@@ -35,22 +26,20 @@ exports.trackView = catchAsync(async (req, res, next) => {
   // Verify vendor exists
   const vendor = await User.findById(vendorId);
   if (!vendor || vendor.role !== 'vendor') {
-    console.log('❌ [Controller] Vendor not found:', vendorId);
-    console.log('------------ VIEW TRACKING REQUEST END ------------');
+    // Vendor not found
     return res.status(404).json({
       success: false,
       message: 'Vendor not found'
     });
   }
 
-  console.log('✅ [Controller] Vendor verified:', vendor.vendorProfile?.businessName || vendor.email);
+  // Vendor verified
 
   // Track the view
   const result = await viewTrackingService.trackView(vendorId, eventId, req);
 
   if (!result.success) {
-    console.log('❌ [Controller] Failed to track view:', result.error);
-    console.log('------------ VIEW TRACKING REQUEST END ------------');
+    // Failed to track view
     return res.status(500).json({
       success: false,
       message: 'Failed to track view',
@@ -58,11 +47,7 @@ exports.trackView = catchAsync(async (req, res, next) => {
     });
   }
 
-  console.log('✅ [Controller] View tracking completed:', {
-    isUnique: result.isUnique,
-    viewId: result.viewId
-  });
-  console.log('------------ VIEW TRACKING REQUEST END ------------');
+  // View tracking completed
 
   res.status(200).json({
     success: true,
@@ -103,14 +88,12 @@ exports.getVendorViewAnalytics = catchAsync(async (req, res, next) => {
 exports.getVendorViewCount = catchAsync(async (req, res, next) => {
   const vendorId = req.user.id;
 
-  console.log('------------ VIEW COUNT REQUEST ------------');
-  console.log('📊 [Controller] Get view count request for vendor:', vendorId);
+  // Get view count request for vendor
 
   const vendor = await User.findById(vendorId).select('vendorProfile.analytics');
   
   if (!vendor) {
-    console.log('❌ [Controller] Vendor not found for view count:', vendorId);
-    console.log('------------ VIEW COUNT REQUEST END ------------');
+    // Vendor not found for view count
     return res.status(404).json({
       success: false,
       message: 'Vendor not found'
@@ -121,13 +104,7 @@ exports.getVendorViewCount = catchAsync(async (req, res, next) => {
   const viewCount = analytics.profileViews || { total: 0, unique: 0, lastUpdated: new Date() };
   const viewHistory = analytics.viewHistory || { daily: 0, weekly: 0, monthly: 0 };
 
-  console.log('📈 [Controller] View count retrieved:', {
-    vendorId,
-    totalViews: viewCount.total,
-    uniqueViews: viewCount.unique,
-    lastUpdated: viewCount.lastUpdated
-  });
-  console.log('------------ VIEW COUNT REQUEST END ------------');
+  // View count retrieved
 
   res.status(200).json({
     success: true,
@@ -181,8 +158,7 @@ exports.getTopCustomers = catchAsync(async (req, res, next) => {
   const limit = parseInt(req.query.limit) || 3;
   const days = parseInt(req.query.days) || 7;
 
-  console.log('------------ TOP CUSTOMERS REQUEST ------------');
-  console.log('📊 [Controller] Get top customers request for vendor:', vendorId);
+  // Get top customers request for vendor
 
   try {
     // Calculate date range
@@ -256,12 +232,7 @@ exports.getTopCustomers = catchAsync(async (req, res, next) => {
       }
     ]);
 
-    console.log('📈 [Controller] Top customers retrieved:', {
-      vendorId,
-      totalCustomers: topCustomers.length,
-      days
-    });
-    console.log('------------ TOP CUSTOMERS REQUEST END ------------');
+    // Top customers retrieved
 
     res.status(200).json({
       success: true,
@@ -281,8 +252,7 @@ exports.getTopCustomers = catchAsync(async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error('❌ [Controller] Error getting top customers:', error);
-    console.log('------------ TOP CUSTOMERS REQUEST END (ERROR) ------------');
+    // Error getting top customers
     
     return res.status(500).json({
       success: false,
@@ -299,8 +269,7 @@ exports.getAllVendorsTopCustomers = catchAsync(async (req, res, next) => {
   const limit = parseInt(req.query.limit) || 3;
   const days = parseInt(req.query.days) || 7;
 
-  console.log('------------ ALL VENDORS TOP CUSTOMERS REQUEST ------------');
-  console.log('📊 [Controller] Get top customers for all vendors request');
+  // Get top customers for all vendors request
 
   try {
     // Calculate date range
@@ -395,11 +364,7 @@ exports.getAllVendorsTopCustomers = catchAsync(async (req, res, next) => {
       })
     );
 
-    console.log('📈 [Controller] All vendors top customers retrieved:', {
-      totalVendors: vendorsWithTopCustomers.length,
-      days
-    });
-    console.log('------------ ALL VENDORS TOP CUSTOMERS REQUEST END ------------');
+    // All vendors top customers retrieved
 
     res.status(200).json({
       success: true,
@@ -410,8 +375,7 @@ exports.getAllVendorsTopCustomers = catchAsync(async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error('❌ [Controller] Error getting all vendors top customers:', error);
-    console.log('------------ ALL VENDORS TOP CUSTOMERS REQUEST END (ERROR) ------------');
+    // Error getting all vendors top customers
     
     return res.status(500).json({
       success: false,
