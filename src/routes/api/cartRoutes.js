@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect, restrictTo } = require('../../middleware/authMiddleware');
 const { 
   getCart, 
+  getCartCount,
   addToCart, 
   updateCartItem, 
   removeFromCart 
@@ -14,6 +15,9 @@ router.use(protect, restrictTo('customer'));
 router.route('/')
   .get(getCart)
   .post(addToCart);
+
+router.route('/count')
+  .get(getCartCount);
   
 router.route('/:cartItemId')
   .patch(updateCartItem)

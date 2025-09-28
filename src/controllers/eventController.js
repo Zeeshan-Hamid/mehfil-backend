@@ -595,4 +595,82 @@ exports.getSimilarEvents = catchAsync(async (req, res, next) => {
       fallbackType: fallbackType
     }
   });
+});
+
+// @desc    Get top 4 categories with most listings
+// @route   GET /api/events/categories
+// @access  Public
+exports.getTopCategories = catchAsync(async (req, res) => {
+ 
+  
+  try {
+    // Get top 4 categories by event count
+    const topCategoriesAgg = await Event.aggregate([
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 4 }
+    ]);
+    
+   
+
+  // Map categories to frontend format with images and descriptions
+  const categoryImages = {
+    'Drinks': '/drinks.avif',
+    'Desserts': '/desserts.webp', 
+    'Decor': '/cat (2).png',
+    'Henna': '/cat (3).png',
+    'Food': '/food.jpg',
+    'Videography': '/cat (3).png',
+    'Venue Management': '/cat (4).png',
+    'Entertainment': '/cat (1).png',
+    'Hair': '/cat (2).png',
+    'Makeup': '/cat (3).png',
+    'Photography': '/cat (3).png',
+    'Catering': '/cat (2).png',
+    'Wedding Planner': '/cat (4).png',
+    'Event Planner': '/cat (4).png',
+    'Other': '/cat (1).png'
+  };
+
+  const categoryDescriptions = {
+    'Drinks': 'Discover refreshing beverage options for your special occasions',
+    'Desserts': 'Sweet treats and desserts to make your event memorable',
+    'Decor': 'Beautiful decorations to transform your venue',
+    'Henna': 'Traditional henna artists for your cultural celebrations',
+    'Food': 'Delicious catering options for all your guests',
+    'Videography': 'Professional videographers to capture your moments',
+    'Venue Management': 'Complete venue management services for seamless events',
+    'Entertainment': 'Live entertainment to keep your guests engaged',
+    'Hair': 'Professional hairstylists for your special day',
+    'Makeup': 'Expert makeup artists for flawless looks',
+    'Photography': 'Professional photographers to capture precious moments',
+    'Catering': 'Complete catering solutions for your events',
+    'Wedding Planner': 'Full-service wedding planning and coordination',
+    'Event Planner': 'Comprehensive event planning services',
+    'Other': 'Specialized services for unique event needs'
+  };
+
+    const categories = topCategoriesAgg.map((category, index) => ({
+      id: index + 1,
+      title: category._id,
+      description: categoryDescriptions[category._id] || 'Professional services for your special event',
+      image: categoryImages[category._id] || '/cat (1).png',
+      count: category.count
+    }));
+
+    
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        categories,
+        count: categories.length
+      }
+    });
+    
+   
+  } catch (error) {
+    console.error('❌ Error in getTopCategories:', error);
+    throw error;
+  }
 }); 

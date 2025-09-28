@@ -2,6 +2,31 @@ const User = require('../models/User');
 const Event = require('../models/Event');
 const mongoose = require('mongoose');
 
+// @desc    Get cart count
+// @route   GET /api/cart/count
+// @access  Private (Customers only)
+exports.getCartCount = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const cartCount = user.customerProfile.customerCart.length;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        count: cartCount
+      }
+    });
+  } catch (error) {
+    console.error('Get cart count error:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
 // @desc    Get the customer's cart
 // @route   GET /api/cart
 // @access  Private (Customers only)
