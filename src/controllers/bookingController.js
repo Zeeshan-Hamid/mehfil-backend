@@ -361,14 +361,23 @@ exports.getBookedVendors = catchAsync(async (req, res, next) => {
 // @route   POST /api/bookings/vendor-create
 // @access  Private (Vendor only)
 exports.createVendorBooking = catchAsync(async (req, res, next) => {
-    const { customerName, customerEmail, eventId, packageName, packageType, eventDate, eventTime, attendees, totalPrice, status } = req.body;
+    const { customerName, customerEmail, eventId, customListing, packageName, eventDate, eventTime, attendees, totalPrice, status } = req.body;
+    let { packageType } = req.body;
     const vendorId = req.user.id;
 
-    // Validation
-    if (!customerName || !customerEmail || !eventId || !packageName || !packageType || !eventDate || !eventTime || !attendees || totalPrice === undefined) {
+    // Validation - either eventId or customListing must be provided
+    if (!customerName || !customerEmail || (!eventId && !customListing) || !packageName || !packageType || !eventDate || !eventTime || !attendees || totalPrice === undefined) {
         return res.status(400).json({ 
             success: false, 
-            message: 'Please provide customerName, customerEmail, eventId, packageName, packageType, eventDate, eventTime, attendees, and totalPrice.' 
+            message: 'Please provide customerName, customerEmail, either eventId or customListing, packageName, packageType, eventDate, eventTime, attendees, and totalPrice.' 
+        });
+    }
+
+    // If customListing is provided, validate its structure
+    if (customListing && (!customListing.name || !customListing.location)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Custom listing must include name and location.' 
         });
     }
 
@@ -376,25 +385,63 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'packageType must be either "regular", "custom", or "flatPrice".' });
     }
 
-    // Verify the event belongs to the vendor
-    // Handle both ObjectId and slug for event lookup
+    // Handle event - either find existing or create new one
     let event = null;
-    const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
     
-    if (isValidObjectId) {
-        // If it's a valid ObjectId, search by ID
-        event = await Event.findById(eventId);
+    if (customListing) {
+        // Check if an event with the same name already exists for this vendor
+        let eventName = customListing.name;
+        let counter = 1;
+        
+        while (await Event.findOne({ 
+            vendor: vendorId, 
+            name: eventName, 
+            category: 'Other' 
+        })) {
+            eventName = `${customListing.name} (${counter})`;
+            counter++;
+        }
+        
+        // Create a new event for the custom listing
+        const newEventData = {
+            vendor: vendorId,
+            name: eventName,
+            category: 'Other', // Default category for custom listings
+            description: `Custom listing created for ${customerName}`,
+            imageUrls: ['/food.jpg'], // Use default food image for custom listings
+            services: ['Custom Service'], // Default service
+            packages: [], // Will be populated below if needed
+            location: {
+                address: customListing.location,
+                city: 'Unknown', // Default values since we only have location string
+                state: 'Unknown',
+                zipCode: '00000',
+                country: 'United States'
+            }
+        };
+
+        // Create the new event
+        event = await Event.create(newEventData);
     } else {
-        // If it's not a valid ObjectId, treat it as a slug
-        event = await Event.findOne({ slug: eventId });
-    }
+        // Verify the event belongs to the vendor
+        // Handle both ObjectId and slug for event lookup
+        const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+        
+        if (isValidObjectId) {
+            // If it's a valid ObjectId, search by ID
+            event = await Event.findById(eventId);
+        } else {
+            // If it's not a valid ObjectId, treat it as a slug
+            event = await Event.findOne({ slug: eventId });
+        }
 
-    if (!event) {
-        return res.status(404).json({ success: false, message: 'Event not found.' });
-    }
+        if (!event) {
+            return res.status(404).json({ success: false, message: 'Event not found.' });
+        }
 
-    if (!event.vendor.equals(vendorId)) {
-        return res.status(403).json({ success: false, message: 'You can only create bookings for your own events.' });
+        if (!event.vendor.equals(vendorId)) {
+            return res.status(403).json({ success: false, message: 'You can only create bookings for your own events.' });
+        }
     }
 
     // Find or create customer
@@ -418,6 +465,11 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
     // Find the package
     let eventPackage;
     let packageId;
+
+    // For custom listings, force packageType to be 'custom'
+    if (customListing && packageType !== 'flatPrice') {
+        packageType = 'custom';
+    }
 
     if (packageType === 'flatPrice') {
         // For flat price, check if the event has an active flat price
@@ -454,6 +506,30 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
         }
     }
 
+    // Convert 24-hour time format to 12-hour AM/PM format
+    const convertTo12HourFormat = (time24) => {
+        if (!time24) return time24;
+        
+        // If already in 12-hour format, return as is
+        if (/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i.test(time24)) {
+            return time24;
+        }
+        
+        // Convert from 24-hour format (HH:MM) to 12-hour format (HH:MM AM/PM)
+        const [hours, minutes] = time24.split(':');
+        const hour24 = parseInt(hours, 10);
+        
+        if (hour24 === 0) {
+            return `12:${minutes} AM`;
+        } else if (hour24 < 12) {
+            return `${hour24}:${minutes} AM`;
+        } else if (hour24 === 12) {
+            return `12:${minutes} PM`;
+        } else {
+            return `${hour24 - 12}:${minutes} PM`;
+        }
+    };
+
     // Create the booking
     const bookingData = {
         customer: customer._id,
@@ -461,7 +537,7 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
         event: event._id, // Use the actual ObjectId from the found event
         packageType,
         eventDate,
-        eventTime,
+        eventTime: convertTo12HourFormat(eventTime),
         attendees,
         totalPrice,
         status: status || 'Pending'
@@ -518,9 +594,33 @@ exports.updateVendorBooking = catchAsync(async (req, res, next) => {
         }
     }
 
+    // Convert 24-hour time format to 12-hour AM/PM format
+    const convertTo12HourFormat = (time24) => {
+        if (!time24) return time24;
+        
+        // If already in 12-hour format, return as is
+        if (/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i.test(time24)) {
+            return time24;
+        }
+        
+        // Convert from 24-hour format (HH:MM) to 12-hour format (HH:MM AM/PM)
+        const [hours, minutes] = time24.split(':');
+        const hour24 = parseInt(hours, 10);
+        
+        if (hour24 === 0) {
+            return `12:${minutes} AM`;
+        } else if (hour24 < 12) {
+            return `${hour24}:${minutes} AM`;
+        } else if (hour24 === 12) {
+            return `12:${minutes} PM`;
+        } else {
+            return `${hour24 - 12}:${minutes} PM`;
+        }
+    };
+
     // Update booking fields
     if (eventDate) booking.eventDate = eventDate;
-    if (eventTime) booking.eventTime = eventTime;
+    if (eventTime) booking.eventTime = convertTo12HourFormat(eventTime);
     if (attendees) booking.attendees = attendees;
     if (totalPrice !== undefined) booking.totalPrice = totalPrice;
     if (status) booking.status = status;
