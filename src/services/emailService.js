@@ -111,7 +111,7 @@ class EmailService {
       
       return true;
     } catch (error) {
-      console.error('❌ Error sending booking confirmation email:', error);
+      // Error sending booking confirmation email
       // Do not throw to avoid failing webhook flow
       return false;
     }
@@ -148,12 +148,7 @@ class EmailService {
       
       return true;
     } catch (error) {
-      console.error(`❌ Error sending password reset email to ${email}:`, error);
-      console.error('Error details:', {
-        code: error.code,
-        response: error.response,
-        responseCode: error.responseCode
-      });
+      // Error sending password reset email
       throw new Error('Failed to send password reset email');
     }
   }
@@ -178,7 +173,7 @@ class EmailService {
       await transporter.sendMail(message);
       return true;
     } catch (error) {
-      console.error('Error sending password reset confirmation:', error);
+      // Error sending password reset confirmation
       throw new Error('Failed to send password reset confirmation');
     }
   }
@@ -205,7 +200,7 @@ class EmailService {
       await transporter.sendMail(message);
       return true;
     } catch (error) {
-      console.error('Error sending verification email:', error);
+      // Error sending verification email
       throw new Error('Failed to send verification email');
     }
   }
@@ -229,22 +224,27 @@ class EmailService {
       await transporter.sendMail(message);
       return true;
     } catch (error) {
-      console.error('Error sending verification success email:', error);
+      // Error sending verification success email
       throw new Error('Failed to send verification success email');
     }
   }
 
-  static async sendNewVendorSignupNotificationEmail({ 
+
+  static async sendVendorVerificationRequestEmail({ 
     vendorEmail, 
     vendorName, 
     businessName, 
     phoneNumber, 
     businessAddress, 
-    signupMethod 
+    vendorId 
   }) {
+    // Sending vendor verification request email
+    
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'info@mehfil.app';
-    const title = '🎉 New Vendor Signup - Action Required';
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'zeeshanhamid03@gmail.com';
+    const title = '🔍 Vendor Verification Request - Action Required';
+    
+    // Email configuration loaded
 
     const vendorDetails = `
       <div style="background-color: #f0f8ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976d2;">
@@ -254,7 +254,7 @@ class EmailService {
           <div style="margin-bottom: 8px;"><strong>Owner Name:</strong> ${vendorName || 'Not provided'}</div>
           <div style="margin-bottom: 8px;"><strong>Email:</strong> ${vendorEmail}</div>
           <div style="margin-bottom: 8px;"><strong>Phone:</strong> ${phoneNumber || 'Not provided'}</div>
-          <div style="margin-bottom: 8px;"><strong>Signup Method:</strong> ${signupMethod === 'google' ? 'Google OAuth' : 'Email Registration'}</div>
+          <div style="margin-bottom: 8px;"><strong>Vendor ID:</strong> ${vendorId}</div>
         </div>
       </div>
     `;
@@ -274,14 +274,14 @@ class EmailService {
 
     const nextSteps = `
       <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f57c00;">
-        <h3 style="color: #f57c00; margin: 0 0 15px 0; font-size: 18px;">📋 Next Steps</h3>
+        <h3 style="color: #f57c00; margin: 0 0 15px 0; font-size: 18px;">📋 Verification Required</h3>
         <div style="color: #333; line-height: 1.6;">
-          <p style="margin: 0 0 10px 0;">A new vendor has signed up and requires your attention:</p>
+          <p style="margin: 0 0 10px 0;">A vendor has completed their profile and is requesting verification:</p>
           <ul style="margin: 10px 0; padding-left: 20px;">
-            <li style="margin-bottom: 5px;">Review the vendor's information and profile</li>
-            <li style="margin-bottom: 5px;">Verify their business details and documentation</li>
-            <li style="margin-bottom: 5px;">Approve or reject their vendor application</li>
-            <li style="margin-bottom: 5px;">Send welcome email with onboarding instructions</li>
+            <li style="margin-bottom: 5px;">Review the vendor's business information and documentation</li>
+            <li style="margin-bottom: 5px;">Verify their business legitimacy and compliance</li>
+            <li style="margin-bottom: 5px;">Approve or reject their verification request</li>
+            <li style="margin-bottom: 5px;">Send verification confirmation email to vendor</li>
           </ul>
         </div>
       </div>
@@ -289,24 +289,24 @@ class EmailService {
 
     const content = `
       <p style="text-align:left;">Hello Admin,</p>
-      <p style="text-align:left;">A new vendor has successfully signed up on Mehfil and is awaiting your review and approval.</p>
+      <p style="text-align:left;">A vendor has completed their profile setup and is requesting verification to become an active vendor on Mehfil.</p>
       
       ${vendorDetails}
       ${addressDetails}
       ${nextSteps}
       
       <p style="text-align:left; color:#777; font-size:14px; margin-top: 25px;">
-        <strong>Important:</strong> Please review this vendor's application promptly to ensure a smooth onboarding experience.
+        <strong>Important:</strong> Please review this vendor's verification request promptly to ensure they can start using the platform.
       </p>
       
       <p style="text-align:left; color:#777; font-size:13px; margin-top: 20px;">
-        You can manage vendors and view their profiles in your <strong>Admin Dashboard</strong>.
+        You can manage vendor verification in your <strong>Admin Dashboard</strong> under the Vendors section.
       </p>
     `;
 
     const button = { 
-      text: 'View Admin Dashboard', 
-      url: `${frontendUrl}/admin` 
+      text: 'Review Vendor Verification', 
+      url: `${frontendUrl}/admin/vendors` 
     };
 
     const html = emailTemplate(title, content, button);
@@ -314,17 +314,137 @@ class EmailService {
     const message = {
       from: `"Mehfil" <${process.env.EMAIL_USER}>`,
       to: adminEmail,
-      subject: `New Vendor Signup: ${businessName || vendorName || vendorEmail} - Mehfil`,
+      subject: `Vendor Verification Request: ${businessName || vendorName || vendorEmail} - Mehfil`,
+      html,
+    };
+
+    try {
+      // Attempting to send email to admin
+      
+      const info = await transporter.sendMail(message);
+      // Vendor verification request email sent successfully
+      return true;
+    } catch (error) {
+      // Error sending vendor verification request email
+      // Do not throw to avoid failing profile completion flow
+      return false;
+    }
+  }
+
+  static async sendVendorVerificationApprovalEmail({ 
+    vendorEmail, 
+    vendorName, 
+    businessName 
+  }) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const title = '🎉 Your Vendor Account Has Been Verified!';
+
+    const content = `
+      <p style="text-align:left;">Hi ${vendorName || 'there'},</p>
+      <p style="text-align:left;">Great news! Your vendor account for <strong>${businessName}</strong> has been successfully verified by our admin team.</p>
+      
+      <div style="background-color: #e8f5e8; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4caf50;">
+        <h3 style="color: #4caf50; margin: 0 0 15px 0; font-size: 18px;">✅ What's Next?</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li style="margin-bottom: 5px;">You can now create and manage your event listings</li>
+            <li style="margin-bottom: 5px;">Start receiving bookings from customers</li>
+            <li style="margin-bottom: 5px;">Access all vendor features in your dashboard</li>
+            <li style="margin-bottom: 5px;">Build your reputation with customer reviews</li>
+          </ul>
+        </div>
+      </div>
+      
+      <p style="text-align:left; color:#777; font-size:14px; margin-top: 25px;">
+        <strong>Welcome to the Mehfil vendor community!</strong> We're excited to have you on board.
+      </p>
+      
+      <p style="text-align:left; color:#777; font-size:13px; margin-top: 20px;">
+        If you have any questions, feel free to reach out to our support team.
+      </p>
+    `;
+
+    const button = { 
+      text: 'Access Vendor Dashboard', 
+      url: `${frontendUrl}/profile_listing` 
+    };
+
+    const html = emailTemplate(title, content, button);
+
+    const message = {
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      to: vendorEmail,
+      subject: 'Vendor Account Verified - Welcome to Mehfil!',
       html,
     };
 
     try {
       const info = await transporter.sendMail(message);
-      console.log('✅ New vendor signup notification sent to admin:', adminEmail);
+      // Vendor verification approval email sent successfully
       return true;
     } catch (error) {
-      console.error('❌ Error sending new vendor signup notification:', error);
-      // Do not throw to avoid failing signup flow
+      // Error sending vendor verification approval email
+      return false;
+    }
+  }
+
+  static async sendVendorVerificationRejectionEmail({ 
+    vendorEmail, 
+    vendorName, 
+    businessName,
+    rejectionReason 
+  }) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const title = 'Vendor Verification Update';
+
+    const content = `
+      <p style="text-align:left;">Hi ${vendorName || 'there'},</p>
+      <p style="text-align:left;">We have reviewed your vendor application for <strong>${businessName}</strong> and unfortunately, we are unable to approve your verification at this time.</p>
+      
+      <div style="background-color: #fff3e0; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f57c00;">
+        <h3 style="color: #f57c00; margin: 0 0 15px 0; font-size: 18px;">📝 Reason for Rejection</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <p style="margin: 0 0 10px 0;">${rejectionReason || 'Please contact our support team for more details.'}</p>
+        </div>
+      </div>
+      
+      <div style="background-color: #f0f8ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976d2;">
+        <h3 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">🔄 Next Steps</h3>
+        <div style="color: #333; line-height: 1.6;">
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li style="margin-bottom: 5px;">Review the feedback provided above</li>
+            <li style="margin-bottom: 5px;">Update your profile with the required information</li>
+            <li style="margin-bottom: 5px;">Contact our support team if you have questions</li>
+            <li style="margin-bottom: 5px;">You can reapply for verification once requirements are met</li>
+          </ul>
+        </div>
+      </div>
+      
+      <p style="text-align:left; color:#777; font-size:14px; margin-top: 25px;">
+        We appreciate your interest in joining Mehfil and encourage you to address the feedback to reapply.
+      </p>
+    `;
+
+    const button = { 
+      text: 'Contact Support', 
+      url: `${frontendUrl}/contact` 
+    };
+
+    const html = emailTemplate(title, content, button);
+
+    const message = {
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      to: vendorEmail,
+      subject: 'Vendor Verification Update - Mehfil',
+      html,
+    };
+
+    try {
+      const info = await transporter.sendMail(message);
+      // Vendor verification rejection email sent successfully
+      return true;
+    } catch (error) {
+      // Error sending vendor verification rejection email
       return false;
     }
   }
@@ -421,10 +541,10 @@ class EmailService {
 
     try {
       const info = await transporter.sendMail(message);
-      console.log('✅ Cancellation request email sent successfully to vendor:', vendorEmail);
+      // Cancellation request email sent successfully
       return true;
     } catch (error) {
-      console.error('❌ Error sending cancellation request email:', error);
+      // Error sending cancellation request email
       // Do not throw to avoid failing message flow
       return false;
     }

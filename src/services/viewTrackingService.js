@@ -21,11 +21,11 @@ class ViewTrackingService {
     if (userId) {
       // For logged-in users, check by userId (from frontend)
       query.userId = userId;
-      console.log(`🔍 [ViewTracking] Checking for duplicate view by userId: ${userId}`);
+      // Checking for duplicate view by userId
     } else {
       // For anonymous users, check by session only (removed IP constraint)
       query.sessionId = sessionId;
-      console.log(`🔍 [ViewTracking] Checking for duplicate view by sessionId: ${sessionId}`);
+      // Checking for duplicate view by sessionId
     }
     
     const existingView = await ViewCount.findOne(query);
@@ -48,14 +48,7 @@ class ViewTrackingService {
   async trackView(vendorId, eventId, req) {
     try {
       const timestamp = new Date().toISOString();
-      console.log(`------------ VENDOR VIEW TRACKING START [${timestamp}] ------------`);
-      console.log(`👁️ [ViewTracking] Starting view tracking for vendor: ${vendorId} at ${timestamp}`);
-      console.log(`🔍 [ViewTracking] Request details:`, {
-        method: req.method,
-        url: req.url,
-        headers: req.headers,
-        body: req.body
-      });
+      // Starting view tracking for vendor
       
       const sessionId = req.sessionID || this.generateSessionId();
       const ipAddress = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
@@ -63,17 +56,7 @@ class ViewTrackingService {
       const viewerId = req.user?.id;
       const userId = req.body.userId; // Get user ID from request body
       
-              console.log('📊 [ViewTracking] View details:', {
-          vendorId,
-          eventId,
-          sessionId: sessionId.substring(0, 8) + '...',
-          ipAddress: ipAddress.substring(0, 15) + '...',
-          userAgent: userAgent.substring(0, 50) + '...',
-          referrer: req.get('Referrer') || 'direct',
-          viewerId: viewerId || 'anonymous',
-          userId: userId || 'not-provided',
-          userType: userId ? 'logged-in' : 'anonymous'
-        });
+              // View details captured
       
       // Check for duplicate views (same session/IP within 24h)
               const duplicateCheck = await this.checkDuplicateView(
@@ -81,8 +64,7 @@ class ViewTrackingService {
         );
       
       if (duplicateCheck.isDuplicate) {
-        console.log(`🔄 [ViewTracking] Duplicate view detected, skipping at ${timestamp}`);
-        console.log(`------------ VENDOR VIEW TRACKING END [${timestamp}] ------------`);
+        // Duplicate view detected, skipping
         return { success: true, isUnique: false };
       }
       
@@ -105,19 +87,13 @@ class ViewTrackingService {
         geoLocation
       });
       
-      console.log(`✅ [ViewTracking] View tracked successfully at ${timestamp}:`, {
-        viewId: viewRecord._id,
-        vendorId,
-        isUnique: true,
-        viewType: eventId ? 'event' : 'profile'
-      });
+      // View tracked successfully
       
-      console.log(`------------ VENDOR VIEW TRACKING END [${timestamp}] ------------`);
+      // View tracking completed
       return { success: true, isUnique: true, viewId: viewRecord._id };
     } catch (error) {
       const errorTimestamp = new Date().toISOString();
-      console.error(`💥 [ViewTracking] Error tracking view at ${errorTimestamp}:`, error);
-      console.log(`------------ VENDOR VIEW TRACKING END (ERROR) [${errorTimestamp}] ------------`);
+      // Error tracking view
       return { success: false, error: error.message };
     }
   }
@@ -126,12 +102,11 @@ class ViewTrackingService {
   async aggregateViewCounts() {
     try {
       const timestamp = new Date().toISOString();
-      console.log(`------------ VIEW COUNT AGGREGATION START [${timestamp}] ------------`);
-      console.log(`🔄 [Aggregation] Starting view count aggregation at ${timestamp}...`);
+      // Starting view count aggregation
       
       // For testing: use last 1 hour instead of last 24 hours
       const cutoffTime = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
-      console.log(`📅 [Aggregation] Aggregating views since: ${cutoffTime.toISOString()}`);
+      // Aggregating views since cutoff time
       
       // Aggregate views - count unique based on isUnique field (set by deduplication logic)
       const dailyStats = await ViewCount.aggregate([
@@ -143,15 +118,12 @@ class ViewTrackingService {
         }}
       ]);
       
-      console.log('📊 [Aggregation] Found stats for vendors:', dailyStats.length);
+      // Found stats for vendors
       
       // Update vendor profiles
       let updatedCount = 0;
       for (const stat of dailyStats) {
-        console.log('📈 [Aggregation] Updating vendor:', stat._id, {
-          totalViews: stat.totalViews,
-          uniqueViews: stat.uniqueViews
-        });
+        // Updating vendor stats
         
         await User.findByIdAndUpdate(stat._id, {
           $set: {
@@ -164,13 +136,11 @@ class ViewTrackingService {
         updatedCount++;
       }
       
-      console.log(`✅ [Aggregation] Updated view counts for ${updatedCount} vendors at ${timestamp}`);
-      console.log(`------------ VIEW COUNT AGGREGATION END [${timestamp}] ------------`);
+      // Updated view counts for vendors
       return { success: true, updatedVendors: updatedCount };
     } catch (error) {
       const errorTimestamp = new Date().toISOString();
-      console.error(`💥 [Aggregation] Error aggregating view counts at ${errorTimestamp}:`, error);
-      console.log(`------------ VIEW COUNT AGGREGATION END (ERROR) [${errorTimestamp}] ------------`);
+      // Error aggregating view counts
       return { success: false, error: error.message };
     }
   }
@@ -210,7 +180,7 @@ class ViewTrackingService {
         }
       };
     } catch (error) {
-      console.error('Error getting vendor view analytics:', error);
+      // Error getting vendor view analytics
       return { success: false, error: error.message };
     }
   }

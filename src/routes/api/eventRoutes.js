@@ -10,7 +10,8 @@ const {
   getVendorEvents,
   getAllEvents,
   getEventsByVendorPublic,
-  getSimilarEvents
+  getSimilarEvents,
+  getTopCategories
 } = require('../../controllers/eventController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 
@@ -18,6 +19,11 @@ const { uploadInMemory } = require('../../services/fileUploadService');
 // --- PUBLIC ROUTES ---
 router.get('/', getAllEvents);
 router.get('/marketplace', getAllEvents);
+router.get('/categories', (req, res, next) => {
+  console.log('🌐 Categories route hit - Method:', req.method, 'URL:', req.url);
+  console.log('🌐 Headers:', req.headers);
+  getTopCategories(req, res, next);
+});
 
 // --- PROTECTED VENDOR-SPECIFIC ROUTES ---
 // This route must come before the general '/:id' route to be matched correctly

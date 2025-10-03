@@ -6,7 +6,11 @@ yarn-error.log*
 frontend/package-lock.json
 
 frontend/
+src/scripts/
 package-lock.json
+
+create*.js
+test*.js
 
 
 # Environment variables

@@ -428,7 +428,10 @@ router.put('/profile', authMiddleware, async (req, res) => {
           role: user.role,
           phoneNumber: user.phoneNumber,
           vendorProfile: user.vendorProfile,
-          customerProfile: user.customerProfile
+          customerProfile: user.customerProfile,
+          vendorVerificationStatus: user.vendorVerificationStatus,
+          vendorVerificationDate: user.vendorVerificationDate,
+          vendorVerificationNotes: user.vendorVerificationNotes
         }
       }
     });

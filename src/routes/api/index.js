@@ -24,6 +24,7 @@ const analyticsRoutes = require('./analyticsRoutes');
 const adminRoutes = require('./adminRoutes');
 const paymentRoutes = require('./paymentRoutes');
 const taxRoutes = require('./taxRoutes');
+const blogRoutes = require('./blogRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -64,5 +65,6 @@ router.use('/analytics', analyticsRoutes);
 router.use('/admin', adminRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/tax', taxRoutes);
+router.use('/blogs', blogRoutes);
 
 module.exports = router; 

@@ -72,7 +72,7 @@ exports.processAndUploadImages = async (files, userId) => {
 
     return uploadedUrls;
   } catch (error) {
-    console.error('❌ [FileUploadService] Error processing/uploading event images:', error);
+    // Error processing/uploading event images
     throw new Error('Failed to process and upload images');
   }
 };
@@ -119,7 +119,7 @@ exports.processAndUploadMessageImage = async (file, userId, conversationId) => {
 
         return imageUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading message image:', error);
+        // Error processing/uploading message image
         throw new Error('Failed to process and upload image');
     }
 };
@@ -176,7 +176,7 @@ exports.processAndUploadMultipleMessageImages = async (files, userId, conversati
         
         return uploadedUrls;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading multiple message images:', error);
+        // Error processing/uploading multiple message images
         throw new Error('Failed to process and upload images');
     }
 };
@@ -209,7 +209,7 @@ exports.uploadMessageDocument = async (file, userId, conversationId) => {
 
         return documentUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error uploading message document:', error);
+        // Error uploading message document
         throw new Error('Failed to upload document');
     }
 };
@@ -256,7 +256,7 @@ exports.processAndUploadProfileImage = async (file, userId) => {
 
         return imageUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading profile image:', error);
+        // Error processing/uploading profile image
         throw new Error('Failed to process and upload profile image');
     }
 };
@@ -305,7 +305,7 @@ exports.processAndUploadBusinessLogo = async (file, userId) => {
 
         return imageUrl;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading business logo:', error);
+        // Error processing/uploading business logo
         throw new Error('Failed to process and upload business logo');
     }
 };
@@ -350,7 +350,52 @@ exports.processAndUploadPromotionalEventImages = async (files, adminId) => {
 
         return uploadedUrls;
     } catch (error) {
-        console.error('❌ [FileUploadService] Error processing/uploading promotional event images:', error);
+        // Error processing/uploading promotional event images
         throw new Error('Failed to process and upload promotional event images');
+    }
+};
+
+// 8. Blog Images Upload Logic
+exports.processAndUploadBlogImages = async (files, adminId) => {
+    try {
+        const uploadedUrls = await Promise.all(
+            files.map(async (file, index) => {
+                // Create a unique filename for the optimized blog image
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + index;
+                const newFilename = `blogs/${adminId}-${uniqueSuffix}.webp`;
+
+                // Process the image: resize and convert to WebP with optimized settings
+                const processedBuffer = await sharp(file.buffer)
+                    .resize({ 
+                        width: 1200, 
+                        height: 800, 
+                        fit: 'inside', 
+                        withoutEnlargement: true 
+                    }) // Resize to max dimensions for blog images
+                    .webp({ 
+                        quality: 85,
+                        effort: 4, // Higher compression effort for smaller file size
+                        nearLossless: false // Better compression
+                    }) // Convert to WebP with 85% quality
+                    .toBuffer();
+
+                // Upload to S3
+                await s3.upload({
+                    Bucket: process.env.S3_BUCKET_NAME,
+                    Key: newFilename,
+                    Body: processedBuffer,
+                    ContentType: 'image/webp',
+                    CacheControl: 'public, max-age=31536000' // Cache for 1 year
+                }).promise();
+
+                // Return the public URL of the uploaded file
+                return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${newFilename}`;
+            })
+        );
+
+        return uploadedUrls;
+    } catch (error) {
+        // Error processing/uploading blog images
+        throw new Error('Failed to process and upload blog images');
     }
 };

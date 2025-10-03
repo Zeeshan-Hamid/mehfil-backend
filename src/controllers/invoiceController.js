@@ -553,9 +553,10 @@ const downloadInvoice = async (req, res) => {
     pdf.text(`Status: ${invoice.status}`, rightBoxX, metaYStart + 48);
 
     // Separator line (only under right meta to avoid overlapping Bill To area)
+    // Moved the line to be after the status field to avoid interfering with date/due date
     pdf.setDrawColor(...lightBorder);
     pdf.setLineWidth(1);
-    pdf.line(rightBoxX, headerHeight + margin / 2, pageWidth - margin, headerHeight + margin / 2);
+    pdf.line(rightBoxX, metaYStart + 64, pageWidth - margin, metaYStart + 64);
 
     // Add Mehfil logo as watermark in background (if available)
     if (mehfilLogoDataUrl) {

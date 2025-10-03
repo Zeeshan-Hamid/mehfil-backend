@@ -329,7 +329,7 @@ exports.createCartNotification = catchAsync(async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Create cart notification error:', error);
+    // Create cart notification error
     throw error;
   }
 });

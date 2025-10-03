@@ -106,7 +106,7 @@ const signupCustomer = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Customer signup error:', error);
+    // Customer signup error
     
     // Handle MongoDB duplicate key error
     if (error.code === 11000) {
@@ -172,6 +172,7 @@ const signupVendor = async (req, res) => {
       role: 'vendor',
       emailVerificationToken: hashedToken,
       emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+      vendorVerificationStatus: 'pending', // New vendors need admin verification
       vendorProfile: {
         businessName,
         ownerName,
@@ -201,20 +202,6 @@ const signupVendor = async (req, res) => {
     const origin = `${req.protocol}://${req.get('host')}`;
     await EmailService.sendVerificationEmail(email, token, origin);
 
-    // Send admin notification email
-    try {
-      await EmailService.sendNewVendorSignupNotificationEmail({
-        vendorEmail: email,
-        vendorName: ownerName,
-        businessName: businessName,
-        phoneNumber: phoneNumber,
-        businessAddress: newVendor.vendorProfile.businessAddress,
-        signupMethod: 'email'
-      });
-    } catch (error) {
-      console.error('Failed to send admin notification for new vendor signup:', error);
-      // Don't fail the signup process if admin notification fails
-    }
 
     // Remove password and unwanted profiles from response
     const vendorResponse = newVendor.toObject();
@@ -235,7 +222,7 @@ const signupVendor = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Vendor signup error:', error);
+    // Vendor signup error
     
     // Handle MongoDB duplicate key error
     if (error.code === 11000) {
@@ -349,7 +336,7 @@ const login = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login error:', error);
+    // Login error
     res.status(500).json({
       success: false,
       message: 'Internal server error during login',
@@ -404,7 +391,7 @@ const forgotPassword = async (req, res) => {
         
       })
       .catch((error) => {
-        console.error(`❌ Failed to send password reset email to ${email}:`, error);
+        // Failed to send password reset email
       });
 
     // Respond immediately to user
@@ -413,7 +400,7 @@ const forgotPassword = async (req, res) => {
       message: 'If a user exists with this email, they will receive password reset instructions.'
     });
   } catch (error) {
-    console.error('Password reset error:', error);
+    // Password reset error
     res.status(500).json({
       success: false,
       message: 'There was an error sending the password reset email. Please try again later.'
@@ -506,7 +493,7 @@ const resetPassword = async (req, res) => {
       message: 'Password has been reset successfully'
     });
   } catch (error) {
-    console.error('Password reset error:', error);
+    // Password reset error
     res.status(500).json({
       success: false,
       message: 'Error resetting password'
@@ -539,10 +526,13 @@ const verifyEmail = async (req, res) => {
     }
 
     // Update user
+    
     user.emailVerified = true;
     user.emailVerificationToken = undefined;
     user.emailVerificationExpires = undefined;
     await user.save();
+    
+    // Email verification completed
 
     // Generate JWT token for auto-login
     const authToken = generateToken(user._id);
@@ -586,7 +576,7 @@ const verifyEmail = async (req, res) => {
     
     return res.redirect(redirectUrl);
   } catch (error) {
-    console.error('Email verification error:', error);
+    // Email verification error
     res.status(500).json({
       success: false,
       message: 'Error verifying email'
@@ -632,7 +622,7 @@ const resendVerificationEmail = async (req, res) => {
       message: 'Verification email sent successfully'
     });
   } catch (error) {
-    console.error('Resend verification email error:', error);
+    // Resend verification email error
     res.status(500).json({
       success: false,
       message: 'Error sending verification email'
@@ -695,7 +685,7 @@ const changePassword = async (req, res) => {
       message: 'Password changed successfully'
     });
   } catch (error) {
-    console.error('Change password error:', error);
+    // Change password error
     res.status(500).json({
       success: false,
       message: 'Error changing password'

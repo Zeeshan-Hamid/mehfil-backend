@@ -9,6 +9,8 @@ const {
   listUsers, getUser, updateUserStatus, updateUserVerification, updateUserRole, deleteUser,
   // Vendors
   updateVendorFlags, updateVendorHalal,
+  // Vendor Verification
+  listVendorsForVerification, updateVendorVerification,
   // Events
   listEvents, createEventForVendor, updateEvent, deleteEvent, toggleEventFeatured,
   // Bookings
@@ -51,6 +53,10 @@ router.delete('/users/:id', deleteUser);
 // Vendors
 router.patch('/vendors/:id/flags', updateVendorFlags);
 router.patch('/vendors/:id/halal', updateVendorHalal);
+
+// Vendor Verification
+router.get('/vendors/verification', listVendorsForVerification);
+router.patch('/vendors/:id/verification', updateVendorVerification);
 
 // Events (Listings)
 router.get('/events', listEvents);

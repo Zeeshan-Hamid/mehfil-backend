@@ -2,6 +2,31 @@ const User = require('../models/User');
 const Event = require('../models/Event');
 const mongoose = require('mongoose');
 
+// @desc    Get cart count
+// @route   GET /api/cart/count
+// @access  Private (Customers only)
+exports.getCartCount = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const cartCount = user.customerProfile.customerCart.length;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        count: cartCount
+      }
+    });
+  } catch (error) {
+    console.error('Get cart count error:', error);
+    res.status(500).json({ success: false, message: 'Server Error' });
+  }
+};
+
 // @desc    Get the customer's cart
 // @route   GET /api/cart
 // @access  Private (Customers only)
@@ -70,7 +95,7 @@ exports.getCart = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Get Cart Error:', error);
+    // Get Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
@@ -223,7 +248,7 @@ exports.addToCart = async (req, res) => {
         socketService.broadcastNotification(notification);
       }
     } catch (notificationError) {
-      console.error('Failed to create cart notification:', notificationError);
+      // Failed to create cart notification
       // Don't fail the cart operation if notification fails
     }
 
@@ -236,7 +261,7 @@ exports.addToCart = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Add to Cart Error:', error);
+    // Add to Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
@@ -282,7 +307,7 @@ exports.updateCartItem = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Update Cart Error:', error);
+    // Update Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 };
@@ -341,7 +366,7 @@ exports.removeFromCart = async (req, res) => {
         socketService.broadcastNotification(notification);
       }
     } catch (notificationError) {
-      console.error('Failed to create cart removal notification:', notificationError);
+      // Failed to create cart removal notification
       // Don't fail the cart operation if notification fails
     }
 
@@ -351,7 +376,7 @@ exports.removeFromCart = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Remove From Cart Error:', error);
+    // Remove From Cart Error
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 }; 

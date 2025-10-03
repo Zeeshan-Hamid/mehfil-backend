@@ -156,6 +156,112 @@ exports.getOverview = catchAsync(async (req, res) => {
   });
 });
 
+// ---------- VENDOR VERIFICATION ----------
+exports.listVendorsForVerification = catchAsync(async (req, res) => {
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+  const status = req.query.status || 'all'; // 'all', 'pending', 'verified', 'rejected'
+
+  // Build query
+  let query = { role: 'vendor' };
+  if (status !== 'all') {
+    query.vendorVerificationStatus = status;
+  }
+
+  // Execute query with pagination
+  const vendors = await User.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .select('email phoneNumber vendorProfile vendorVerificationStatus vendorVerificationDate vendorVerificationNotes createdAt')
+    .lean();
+
+  // Get total count for pagination
+  const totalVendors = await User.countDocuments(query);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      vendors,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalVendors / limit),
+        totalVendors,
+        hasNextPage: skip + vendors.length < totalVendors,
+        hasPrevPage: page > 1
+      }
+    }
+  });
+});
+
+exports.updateVendorVerification = catchAsync(async (req, res) => {
+  const { id: vendorId } = req.params;
+  const { status, notes } = req.body;
+
+  if (!['pending', 'verified', 'rejected'].includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid verification status. Must be pending, verified, or rejected.'
+    });
+  }
+
+  const vendor = await User.findById(vendorId);
+  if (!vendor || vendor.role !== 'vendor') {
+    return res.status(404).json({
+      success: false,
+      message: 'Vendor not found'
+    });
+  }
+
+  // Update verification status
+  vendor.vendorVerificationStatus = status;
+  vendor.vendorVerificationDate = new Date();
+  if (notes) {
+    vendor.vendorVerificationNotes = notes;
+  }
+
+  await vendor.save();
+
+  // Send appropriate email notification
+  try {
+    const EmailService = require('../services/emailService');
+    
+    if (status === 'verified') {
+      await EmailService.sendVendorVerificationApprovalEmail({
+        vendorEmail: vendor.email,
+        vendorName: vendor.vendorProfile.ownerName,
+        businessName: vendor.vendorProfile.businessName
+      });
+    } else if (status === 'rejected') {
+      await EmailService.sendVendorVerificationRejectionEmail({
+        vendorEmail: vendor.email,
+        vendorName: vendor.vendorProfile.ownerName,
+        businessName: vendor.vendorProfile.businessName,
+        rejectionReason: notes || 'Please contact support for more details.'
+      });
+    }
+  } catch (error) {
+    // Failed to send verification email
+    // Don't fail the verification update if email fails
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `Vendor verification status updated to ${status}`,
+    data: {
+      vendor: {
+        id: vendor._id,
+        email: vendor.email,
+        businessName: vendor.vendorProfile.businessName,
+        verificationStatus: vendor.vendorVerificationStatus,
+        verificationDate: vendor.vendorVerificationDate,
+        verificationNotes: vendor.vendorVerificationNotes
+      }
+    }
+  });
+});
+
 // ---------- USERS ----------
 exports.listUsers = catchAsync(async (req, res) => {
   const { page = 1, limit = 20, role, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
@@ -338,21 +444,18 @@ exports.updateUserRole = catchAsync(async (req, res) => {
 
 exports.deleteUser = catchAsync(async (req, res) => {
   const adminUser = req.user;
-  console.log(`\n👑 ADMIN ACTION - User Deletion Request`);
-  console.log(`👤 Admin: ${adminUser.email} (${adminUser.role})`);
-  console.log(`🎯 Target User ID: ${req.params.id}`);
-  console.log(`⏰ Requested at: ${new Date().toISOString()}`);
+  // Admin action - User deletion request
   
   const user = await User.findById(req.params.id);
   if (!user) {
-    console.log(`❌ User not found: ${req.params.id}`);
+    // User not found
     return res.status(404).json({ success: false, message: 'User not found' });
   }
   
-  console.log(`🎯 Target User: ${user.email} (${user.role})`);
+  // Target user identified
   
   if (user.role === 'admin') {
-    console.log(`❌ Cannot delete admin user: ${user.email}`);
+    // Cannot delete admin user
     return res.status(400).json({ success: false, message: 'Cannot delete admin user' });
   }
   
@@ -366,7 +469,7 @@ exports.deleteUser = catchAsync(async (req, res) => {
       });
       
       if (activeBookings.length > 0) {
-        console.log(`❌ Cannot delete vendor with ${activeBookings.length} active bookings`);
+        // Cannot delete vendor with active bookings
         return res.status(400).json({ 
           success: false, 
           message: `Cannot delete vendor with ${activeBookings.length} active bookings. Please cancel or complete all bookings first.`,
@@ -381,7 +484,7 @@ exports.deleteUser = catchAsync(async (req, res) => {
       });
       
       if (pendingPayments.length > 0) {
-        console.log(`❌ Cannot delete vendor with ${pendingPayments.length} pending payments`);
+        // Cannot delete vendor with pending payments
         return res.status(400).json({ 
           success: false, 
           message: `Cannot delete vendor with ${pendingPayments.length} pending payments. Please resolve all payment issues first.`,
@@ -389,7 +492,7 @@ exports.deleteUser = catchAsync(async (req, res) => {
         });
       }
       
-      console.log(`🧹 Cleaning up vendor data for: ${user.email}`);
+      // Cleaning up vendor data
       
       // Delete all events (listings) created by this vendor
       await Event.deleteMany({ vendor: user._id });
@@ -425,9 +528,9 @@ exports.deleteUser = catchAsync(async (req, res) => {
       // Delete all view counts for this vendor
       await ViewCount.deleteMany({ vendorId: user._id });
       
-      console.log(`✅ Cleaned up all related data for vendor: ${user.email} (${user._id})`);
+      // Cleaned up all related data for vendor
     } catch (error) {
-      console.error('❌ Error cleaning up vendor data:', error);
+      // Error cleaning up vendor data
       return res.status(500).json({ 
         success: false, 
         message: 'Failed to clean up vendor data. Please try again.' 
@@ -442,7 +545,7 @@ exports.deleteUser = catchAsync(async (req, res) => {
       });
       
       if (activeBookings.length > 0) {
-        console.log(`❌ Cannot delete customer with ${activeBookings.length} active bookings`);
+        // Cannot delete customer with active bookings
         return res.status(400).json({ 
           success: false, 
           message: `Cannot delete customer with ${activeBookings.length} active bookings. Please cancel or complete all bookings first.`,
@@ -450,7 +553,7 @@ exports.deleteUser = catchAsync(async (req, res) => {
         });
       }
       
-      console.log(`🧹 Cleaning up customer data for: ${user.email}`);
+      // Cleaning up customer data
       
       // Delete all bookings for this customer
       await Booking.deleteMany({ customer: user._id });
@@ -480,9 +583,9 @@ exports.deleteUser = catchAsync(async (req, res) => {
       // Delete all todos for this customer
       await Todo.deleteMany({ user: user._id });
       
-      console.log(`✅ Cleaned up all related data for customer: ${user.email} (${user._id})`);
+      // Cleaned up all related data for customer
     } catch (error) {
-      console.error('❌ Error cleaning up customer data:', error);
+      // Error cleaning up customer data
       return res.status(500).json({ 
         success: false, 
         message: 'Failed to clean up customer data. Please try again.' 
@@ -500,9 +603,7 @@ exports.deleteUser = catchAsync(async (req, res) => {
   // Delete the user
   await User.findByIdAndDelete(user._id);
   
-  console.log(`✅ User deleted successfully: ${user.email} (${user.role})`);
-  console.log(`👑 Admin action completed by: ${adminUser.email}`);
-  console.log(`⏰ Completed at: ${new Date().toISOString()}\n`);
+  // User deleted successfully
   
   res.status(200).json({ 
     success: true, 
@@ -1250,6 +1351,8 @@ module.exports = {
   deleteUser: exports.deleteUser,
   updateVendorFlags: exports.updateVendorFlags,
   updateVendorHalal: exports.updateVendorHalal,
+  listVendorsForVerification: exports.listVendorsForVerification,
+  updateVendorVerification: exports.updateVendorVerification,
   listEvents: exports.listEvents,
   createEventForVendor: exports.createEventForVendor,
   updateEvent: exports.updateEvent,

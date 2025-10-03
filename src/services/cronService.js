@@ -9,12 +9,12 @@ class CronService {
   // Initialize all cron jobs
   init() {
     const initTimestamp = new Date().toISOString();
-    console.log(`🕐 [${initTimestamp}] Initializing cron jobs...`);
+    // Initializing cron jobs
     
     // Daily view count aggregation at 2 AM
     this.scheduleViewCountAggregation();
     
-    console.log(`✅ [${initTimestamp}] Cron jobs initialized`);
+    // Cron jobs initialized
   }
 
   // Schedule daily view count aggregation
@@ -22,16 +22,16 @@ class CronService {
     // Run daily at 2 AM UTC
     const job = cron.schedule('0 2 * * *', async () => {
       const timestamp = new Date().toISOString();
-      console.log(`🕐 [${timestamp}] 🔄 Running daily view count aggregation...`);
+      // Running daily view count aggregation
       try {
         const result = await viewTrackingService.aggregateViewCounts();
         if (result.success) {
-          console.log(`✅ [${timestamp}] Daily aggregation completed. Updated ${result.updatedVendors} vendors`);
+          // Daily aggregation completed
         } else {
-          console.error(`❌ [${timestamp}] Daily aggregation failed:`, result.error);
+          // Daily aggregation failed
         }
       } catch (error) {
-        console.error(`💥 [${timestamp}] Error in daily aggregation:`, error);
+        // Error in daily aggregation
       }
     }, {
       scheduled: true,
@@ -40,33 +40,33 @@ class CronService {
 
     this.jobs.set('viewCountAggregation', job);
     const initTimestamp = new Date().toISOString();
-    console.log(`📅 [${initTimestamp}] Scheduled daily view count aggregation for 2:00 AM UTC`);
+    // Scheduled daily view count aggregation for 2:00 AM UTC
   }
 
   // Manually trigger view count aggregation (for testing)
   async triggerViewCountAggregation() {
-    console.log('🔄 Manually triggering view count aggregation...');
+    // Manually triggering view count aggregation
     try {
       const result = await viewTrackingService.aggregateViewCounts();
       if (result.success) {
-        console.log(`✅ Manual aggregation completed. Updated ${result.updatedVendors} vendors`);
+        // Manual aggregation completed
         return result;
       } else {
-        console.error('❌ Manual aggregation failed:', result.error);
+        // Manual aggregation failed
         return result;
       }
     } catch (error) {
-      console.error('💥 Error in manual aggregation:', error);
+      // Error in manual aggregation
       return { success: false, error: error.message };
     }
   }
 
   // Stop all cron jobs
   stop() {
-    console.log('🛑 Stopping all cron jobs...');
+    // Stopping all cron jobs
     this.jobs.forEach((job, name) => {
       job.stop();
-      console.log(`⏹️ Stopped job: ${name}`);
+      // Stopped job
     });
     this.jobs.clear();
   }

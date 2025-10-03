@@ -20,7 +20,11 @@
     "test:user": "node src/scripts/test-user-scenario.js",
     "debug:views": "node src/scripts/debug-views.js",
     "reset:analytics": "node src/scripts/reset-analytics.js",
-    "clear:views": "node src/scripts/clear-views.js"
+    "clear:views": "node src/scripts/clear-views.js",
+    "migrate:vendor-verification": "node src/scripts/migrate-vendor-verification.js",
+    "test:verification-flow": "node src/scripts/test-verification-flow.js",
+    "test:complete-verification": "node src/scripts/test-complete-verification-flow.js",
+    "test:verification-flow-complete": "node src/scripts/test-verification-flow-complete.js"
   },
   "author": "",
   "license": "ISC",

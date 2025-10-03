@@ -197,7 +197,7 @@ exports.createCheckoutSession = async (req, res) => {
 						});
 					}
 				} catch (error) {
-					console.error(`Error calculating tax for zipcode ${zipCode}:`, error);
+					// Error calculating tax for zipcode
 				}
 			}
 			
@@ -234,7 +234,7 @@ exports.createCheckoutSession = async (req, res) => {
         // Validate metadata length before creating session
         const metadataLength = JSON.stringify(metadata).length;
         if (metadataLength > 500) {
-            console.error(`Metadata still too long: ${metadataLength} chars. Stripping to essential fields only.`);
+            // Metadata still too long, stripping to essential fields only
             metadata.taxStates = undefined;
             metadata.taxRates = undefined;
         }
@@ -278,7 +278,7 @@ exports.createCheckoutSession = async (req, res) => {
 			} 
 		});
 	} catch (error) {
-		console.error('Create Checkout Session Error:', error);
+		// Create Checkout Session Error
 		return res.status(500).json({ success: false, message: 'Failed to create checkout session' });
 	}
 };
@@ -296,7 +296,7 @@ exports.handleStripeWebhook = async (req, res) => {
         const stripe = getStripe();
         event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
 	} catch (err) {
-		console.error('Webhook signature verification failed:', err.message);
+		// Webhook signature verification failed
 		return res.status(400).send(`Webhook Error: ${err.message}`);
 	}
 
@@ -372,7 +372,7 @@ exports.handleStripeWebhook = async (req, res) => {
                             total
                         });
                     } catch (emailErr) {
-                        console.error('Failed to send booking confirmation email:', emailErr);
+                        // Failed to send booking confirmation email
                     }
 				}
 				break;
@@ -390,7 +390,7 @@ exports.handleStripeWebhook = async (req, res) => {
 
 		return res.status(200).json({ received: true });
 	} catch (error) {
-		console.error('Webhook handling error:', error);
+		// Webhook handling error
 		return res.status(500).send('Webhook handling error');
 	}
 };

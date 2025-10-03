@@ -82,6 +82,25 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Vendor verification status
+    vendorVerificationStatus: {
+      type: String,
+      enum: ['pending', 'verified', 'rejected'],
+      default: function() {
+        return this.role === 'vendor' ? 'pending' : undefined;
+      }
+    },
+
+    vendorVerificationDate: {
+      type: Date,
+      default: null
+    },
+
+    vendorVerificationNotes: {
+      type: String,
+      maxlength: [500, "Verification notes cannot exceed 500 characters"]
+    },
+
     twoFactorEnabled: {
       type: Boolean,
       default: false,
@@ -725,24 +744,49 @@ userSchema.pre("save", function (next) {
       const wasProfileIncomplete = !this.vendorProfile.profileCompleted;
       this.vendorProfile.profileCompleted = true;
       
-      // Send admin notification if this is a Google OAuth vendor completing their profile
-      if (wasProfileIncomplete && this.authProvider === 'google') {
+      // Send admin verification request if vendor profile is completed, verification is pending, AND email is verified
+      console.log('🔍 Email sending conditions check:', {
+        wasProfileIncomplete,
+        vendorVerificationStatus: this.vendorVerificationStatus,
+        emailVerified: this.emailVerified,
+        email: this.email,
+        shouldSendEmail: wasProfileIncomplete && this.vendorVerificationStatus === 'pending' && this.emailVerified
+      });
+      
+      if (wasProfileIncomplete && this.vendorVerificationStatus === 'pending' && this.emailVerified) {
+        console.log('📧 Sending vendor verification request email to admin...');
         // Use setImmediate to avoid blocking the save operation
         setImmediate(async () => {
           try {
-            const EmailService = require('../../services/emailService');
-            await EmailService.sendNewVendorSignupNotificationEmail({
+            console.log('📧 Email service called with data:', {
               vendorEmail: this.email,
               vendorName: this.vendorProfile.ownerName,
               businessName: this.vendorProfile.businessName,
               phoneNumber: this.phoneNumber,
               businessAddress: this.vendorProfile.businessAddress,
-              signupMethod: 'google'
+              vendorId: this._id
             });
+            
+            const EmailService = require('../../services/emailService');
+            await EmailService.sendVendorVerificationRequestEmail({
+              vendorEmail: this.email,
+              vendorName: this.vendorProfile.ownerName,
+              businessName: this.vendorProfile.businessName,
+              phoneNumber: this.phoneNumber,
+              businessAddress: this.vendorProfile.businessAddress,
+              vendorId: this._id
+            });
+            console.log('✅ Vendor verification request email sent successfully!');
           } catch (error) {
-            console.error('Failed to send admin notification for Google vendor profile completion:', error);
+            console.error('❌ Failed to send vendor verification request email:', error);
             // Don't fail the save operation if email fails
           }
+        });
+      } else {
+        console.log('⏭️ Skipping email send - conditions not met:', {
+          wasProfileIncomplete,
+          vendorVerificationStatus: this.vendorVerificationStatus,
+          emailVerified: this.emailVerified
         });
       }
       
