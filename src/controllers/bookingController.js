@@ -11,27 +11,60 @@ const catchAsync = fn => {
 
 // Helper function to populate package details for a booking
 const populatePackageDetails = async (booking) => {
-    // The 'event' field is partially populated by a pre-find hook.
-    // We need to fetch the full event to get package details.
-    const event = await Event.findById(booking.event._id).select('packages customPackages');
-    if (!event) {
-        return { ...booking.toObject(), package: null, error: 'The original event for this booking has been deleted.' };
-    }
+    let eventPackage = null;
+    
+    if (booking.isCustomListing) {
+        // For custom listings, create a virtual event object with custom details
+        const customEvent = {
+            _id: 'custom',
+            name: booking.customEventName,
+            location: {
+                address: booking.customEventLocation,
+                city: 'Custom Location',
+                state: 'Custom',
+                zipCode: '00000',
+                country: 'United States'
+            }
+        };
+        
+        // For custom listings, the package is just the package name and price
+        eventPackage = { 
+            name: booking.packageName || 'Custom Package', 
+            price: booking.totalPrice 
+        };
+        
+        return {
+            ...booking.toObject(),
+            event: customEvent,
+            package: eventPackage
+        };
+    } else {
+        // For regular bookings, handle packages normally
+        if (!booking.event || !booking.event._id) {
+            return { ...booking.toObject(), package: null, error: 'The original event for this booking has been deleted.' };
+        }
 
-    let eventPackage;
-    if (booking.packageType === 'regular') {
-        eventPackage = event.packages.id(booking.package);
-    } else if (booking.packageType === 'custom') {
-        eventPackage = event.customPackages.id(booking.package);
-    } else if (booking.packageType === 'flatPrice') {
-        // For flat price bookings, return a special package object
-        eventPackage = { name: 'Flat Price' };
-    }
+        // The 'event' field is partially populated by a pre-find hook.
+        // We need to fetch the full event to get package details.
+        const event = await Event.findById(booking.event._id).select('packages customPackages');
+        if (!event) {
+            return { ...booking.toObject(), package: null, error: 'The original event for this booking has been deleted.' };
+        }
 
-    return {
-        ...booking.toObject(),
-        package: eventPackage ? (eventPackage.toObject ? eventPackage.toObject() : eventPackage) : { name: 'Package not found' }
-    };
+        if (booking.packageType === 'regular') {
+            eventPackage = event.packages.id(booking.package);
+        } else if (booking.packageType === 'custom') {
+            eventPackage = event.customPackages.id(booking.package);
+        } else if (booking.packageType === 'flatPrice') {
+            // For flat price bookings, return a special package object
+            eventPackage = { name: 'Flat Price' };
+        }
+
+        return {
+            ...booking.toObject(),
+            package: eventPackage ? (eventPackage.toObject ? eventPackage.toObject() : eventPackage) : { name: 'Package not found' }
+        };
+    }
 };
 
 
@@ -389,39 +422,9 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
     let event = null;
     
     if (customListing) {
-        // Check if an event with the same name already exists for this vendor
-        let eventName = customListing.name;
-        let counter = 1;
-        
-        while (await Event.findOne({ 
-            vendor: vendorId, 
-            name: eventName, 
-            category: 'Other' 
-        })) {
-            eventName = `${customListing.name} (${counter})`;
-            counter++;
-        }
-        
-        // Create a new event for the custom listing
-        const newEventData = {
-            vendor: vendorId,
-            name: eventName,
-            category: 'Other', // Default category for custom listings
-            description: `Custom listing created for ${customerName}`,
-            imageUrls: ['/food.jpg'], // Use default food image for custom listings
-            services: ['Custom Service'], // Default service
-            packages: [], // Will be populated below if needed
-            location: {
-                address: customListing.location,
-                city: 'Unknown', // Default values since we only have location string
-                state: 'Unknown',
-                zipCode: '00000',
-                country: 'United States'
-            }
-        };
-
-        // Create the new event
-        event = await Event.create(newEventData);
+        // For custom listings, don't create an event - just store the custom name and location
+        // We'll store these directly in the booking
+        event = null; // No actual event for custom listings
     } else {
         // Verify the event belongs to the vendor
         // Handle both ObjectId and slug for event lookup
@@ -462,47 +465,49 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
         });
     }
 
-    // Find the package
-    let eventPackage;
-    let packageId;
+    // Handle package logic - for custom listings, we don't need packages
+    let eventPackage = null;
+    let packageId = null;
 
-    // For custom listings, force packageType to be 'custom'
-    if (customListing && packageType !== 'flatPrice') {
-        packageType = 'custom';
-    }
-
-    if (packageType === 'flatPrice') {
-        // For flat price, check if the event has an active flat price
-        if (!event.flatPrice || !event.flatPrice.isActive) {
-            return res.status(400).json({ success: false, message: 'This event does not have an active flat price.' });
-        }
-        eventPackage = { name: 'Flat Price', price: event.flatPrice.amount };
-        packageId = null; // No package ID for flat price
-    } else if (packageType === 'regular') {
-        eventPackage = event.packages.find(pkg => pkg.name === packageName);
-        if (!eventPackage) {
-            return res.status(404).json({ success: false, message: 'Package not found for this event.' });
-        }
-        packageId = eventPackage._id;
+    if (customListing) {
+        // For custom listings, no packages are needed - just store the package name and price
+        eventPackage = { name: packageName, price: totalPrice };
+        packageId = null;
     } else {
-        // For custom packages, create a new one or find existing
-        eventPackage = event.customPackages.find(pkg => pkg.name === packageName);
-        if (!eventPackage) {
-            // Create a new custom package
-            const newCustomPackage = {
-                name: packageName,
-                price: totalPrice,
-                description: `Custom package for ${customerName}`,
-                includes: ['Custom package services'], // Required field - at least one inclusion
-                createdFor: customer._id,
-                createdBy: vendorId, // Required field - the vendor creating this package
-                isActive: true
-            };
-            event.customPackages.push(newCustomPackage);
-            await event.save();
-            packageId = event.customPackages[event.customPackages.length - 1]._id;
-        } else {
+        // For existing events, handle packages normally
+        if (packageType === 'flatPrice') {
+            // For flat price, check if the event has an active flat price
+            if (!event.flatPrice || !event.flatPrice.isActive) {
+                return res.status(400).json({ success: false, message: 'This event does not have an active flat price.' });
+            }
+            eventPackage = { name: 'Flat Price', price: event.flatPrice.amount };
+            packageId = null; // No package ID for flat price
+        } else if (packageType === 'regular') {
+            eventPackage = event.packages.find(pkg => pkg.name === packageName);
+            if (!eventPackage) {
+                return res.status(404).json({ success: false, message: 'Package not found for this event.' });
+            }
             packageId = eventPackage._id;
+        } else {
+            // For custom packages, create a new one or find existing
+            eventPackage = event.customPackages.find(pkg => pkg.name === packageName);
+            if (!eventPackage) {
+                // Create a new custom package
+                const newCustomPackage = {
+                    name: packageName,
+                    price: totalPrice,
+                    description: `Custom package for ${customerName}`,
+                    includes: ['Custom package services'], // Required field - at least one inclusion
+                    createdFor: customer._id,
+                    createdBy: vendorId, // Required field - the vendor creating this package
+                    isActive: true
+                };
+                event.customPackages.push(newCustomPackage);
+                await event.save();
+                packageId = event.customPackages[event.customPackages.length - 1]._id;
+            } else {
+                packageId = eventPackage._id;
+            }
         }
     }
 
@@ -534,7 +539,6 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
     const bookingData = {
         customer: customer._id,
         vendor: vendorId,
-        event: event._id, // Use the actual ObjectId from the found event
         packageType,
         eventDate,
         eventTime: convertTo12HourFormat(eventTime),
@@ -543,8 +547,20 @@ exports.createVendorBooking = catchAsync(async (req, res, next) => {
         status: status || 'Pending'
     };
 
-    // For flat price items, don't set package field
-    if (packageType !== 'flatPrice') {
+    // Handle event field based on whether it's a custom listing or existing event
+    if (customListing) {
+        bookingData.isCustomListing = true;
+        bookingData.customEventName = customListing.name;
+        bookingData.customEventLocation = customListing.location;
+        bookingData.packageName = packageName;
+        // Don't set event field for custom listings
+    } else {
+        bookingData.event = event._id; // Use the actual ObjectId from the found event
+        bookingData.isCustomListing = false;
+    }
+
+    // For flat price items and custom listings, don't set package field
+    if (packageType !== 'flatPrice' && !customListing) {
         bookingData.package = packageId;
     }
 

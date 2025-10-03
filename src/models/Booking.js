@@ -14,19 +14,45 @@ const bookingSchema = new mongoose.Schema({
     event: {
         type: mongoose.Schema.ObjectId,
         ref: 'Event',
-        required: [true, 'Booking must be for an event.']
+        required: function() {
+            // Event is not required for custom listings
+            return !this.isCustomListing;
+        }
     },
     package: {
         type: mongoose.Schema.ObjectId,
         required: function() {
-            // Package is not required for flat price items
-            return this.packageType !== 'flatPrice';
+            // Package is not required for flat price items or custom listings
+            return this.packageType !== 'flatPrice' && !this.isCustomListing;
         }
     },
     packageType: {
         type: String,
         enum: ['regular', 'custom', 'flatPrice'],
         required: true
+    },
+    // Custom listing fields
+    isCustomListing: {
+        type: Boolean,
+        default: false
+    },
+    customEventName: {
+        type: String,
+        required: function() {
+            return this.isCustomListing;
+        }
+    },
+    customEventLocation: {
+        type: String,
+        required: function() {
+            return this.isCustomListing;
+        }
+    },
+    packageName: {
+        type: String,
+        required: function() {
+            return this.isCustomListing;
+        }
     },
     eventDate: {
         type: Date,
