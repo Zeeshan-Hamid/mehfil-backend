@@ -186,7 +186,7 @@ exports.addToCart = async (req, res) => {
         return res.status(409).json({ success: false, message: 'This item is already in your cart. You can update it from the cart page.' });
     }
 
-    // Compute total price for custom packages on the server to ensure correctness
+    // Compute total price based on package type and pricing mode
     let computedTotalPrice = totalPrice;
     if (packageType === 'custom') {
       // Check if this is a flat price custom package
@@ -199,6 +199,20 @@ exports.addToCart = async (req, res) => {
         const qty = Number(attendees) || 1;
         computedTotalPrice = unitPrice * qty;
       }
+    } else if (packageType === 'regular') {
+      // Check if this is a flat price regular package
+      if (eventPackage.pricingMode === 'flatPrice') {
+        // For flat price regular packages, use the price as-is
+        computedTotalPrice = Number(eventPackage.price) || 0;
+      } else {
+        // For per-attendee regular packages, multiply by attendees
+        const unitPrice = Number(eventPackage.price) || 0;
+        const qty = Number(attendees) || 1;
+        computedTotalPrice = unitPrice * qty;
+      }
+    } else if (packageType === 'flatPrice') {
+      // For legacy flat price events, use the flat price amount
+      computedTotalPrice = Number(event.flatPrice.amount) || 0;
     }
 
     const cartItem = {
@@ -206,7 +220,7 @@ exports.addToCart = async (req, res) => {
       packageType,
       eventDate,
       eventTime,
-      attendees: eventPackage.pricingMode === 'flatPrice' ? 1 : attendees,
+      attendees: (packageType === 'flatPrice' || eventPackage.pricingMode === 'flatPrice') ? 1 : attendees,
       totalPrice: computedTotalPrice
     };
 
@@ -236,7 +250,7 @@ exports.addToCart = async (req, res) => {
         packageType,
         eventDate,
         eventTime,
-        attendees: eventPackage.pricingMode === 'flatPrice' ? 1 : attendees,
+        attendees: (packageType === 'flatPrice' || eventPackage.pricingMode === 'flatPrice') ? 1 : attendees,
         totalPrice: computedTotalPrice
       };
       

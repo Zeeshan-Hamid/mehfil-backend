@@ -92,7 +92,12 @@ exports.createCheckoutSession = async (req, res) => {
 			} else if (item.packageType === 'regular') {
 				pkg = item.event.packages?.id?.(item.package);
 				packageName = pkg?.name;
-				packageDescription = pkg?.name || 'Package';
+				// Add pricing mode indicator to description
+				if (pkg?.pricingMode === 'flatPrice') {
+					packageDescription = `${pkg?.name || 'Package'} (Flat Price)`;
+				} else {
+					packageDescription = `${pkg?.name || 'Package'} (Per Person)`;
+				}
 			} else {
 				const customPackages = item.event.customPackages || [];
 				pkg = customPackages.find(p => p._id.toString() === item.package.toString());
