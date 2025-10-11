@@ -27,6 +27,12 @@ const packageSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [500, 'Package description cannot exceed 500 characters.']
+  },
+  // Pricing mode: perAttendee or flatPrice
+  pricingMode: {
+    type: String,
+    enum: ['perAttendee', 'flatPrice'],
+    default: 'perAttendee'
   }
 });
 
