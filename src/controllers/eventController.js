@@ -40,11 +40,31 @@ exports.createEvent = async (req, res, next) => {
 
     // 4. Parse stringified JSON fields from form-data
     const eventData = { ...req.body };
+    console.log('Backend - Raw req.body.offerings:', req.body.offerings);
     if (eventData.packages) eventData.packages = JSON.parse(eventData.packages);
     if (eventData.location) eventData.location = JSON.parse(eventData.location);
-    if (eventData.services) eventData.services = JSON.parse(eventData.services);
+    if (eventData.services && eventData.services !== '[]') {
+      eventData.services = JSON.parse(eventData.services);
+    } else {
+      eventData.services = []; // Default to empty array if not provided
+    }
+    if (eventData.offerings && eventData.offerings !== '[]' && eventData.offerings !== '') {
+      try {
+        eventData.offerings = JSON.parse(eventData.offerings);
+        console.log('Backend - Successfully parsed offerings:', eventData.offerings);
+      } catch (parseError) {
+        console.error('Backend - Error parsing offerings:', parseError);
+        eventData.offerings = [];
+      }
+    } else {
+      eventData.offerings = []; // Default to empty array if not provided
+    }
+    console.log('Backend - Parsed eventData.offerings:', eventData.offerings);
+    console.log('Backend - eventData.offerings type:', typeof eventData.offerings);
+    console.log('Backend - eventData.offerings length:', eventData.offerings?.length);
     if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
     if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
+    
     
     // Handle boolean fields that come as strings from form-data
     if (eventData.flexible_price !== undefined) {
@@ -163,6 +183,11 @@ exports.updateEvent = catchAsync(async (req, res, next) => {
   if (eventData.packages) eventData.packages = JSON.parse(eventData.packages);
   if (eventData.location) eventData.location = JSON.parse(eventData.location);
   if (eventData.services) eventData.services = JSON.parse(eventData.services);
+  if (eventData.offerings && eventData.offerings !== '[]' && eventData.offerings !== '') {
+    eventData.offerings = JSON.parse(eventData.offerings);
+  } else {
+    eventData.offerings = []; // Default to empty array if not provided
+  }
   if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
   if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
   
@@ -284,22 +309,26 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
     }
 
     // Filter by price range (if events have a starting price)
-    if (req.query.minPrice) {
-      const minPrice = parseFloat(req.query.minPrice);
-      if (!isNaN(minPrice) && minPrice >= 0) {
-        queryObj['packages.price'] = { $gte: minPrice };
-       
-      }
-    }
-
-    if (req.query.maxPrice) {
-      const maxPrice = parseFloat(req.query.maxPrice);
-      if (!isNaN(maxPrice) && maxPrice >= 0) {
-        if (!queryObj['packages.price']) {
-          queryObj['packages.price'] = {};
+    if (req.query.minPrice || req.query.maxPrice) {
+      const priceConditions = [];
+      
+      if (req.query.minPrice) {
+        const minPrice = parseFloat(req.query.minPrice);
+        if (!isNaN(minPrice) && minPrice >= 0) {
+          priceConditions.push({ 'packages.price': { $gte: minPrice } });
         }
-        queryObj['packages.price'].$lte = maxPrice;
-       
+      }
+      
+      if (req.query.maxPrice) {
+        const maxPrice = parseFloat(req.query.maxPrice);
+        if (!isNaN(maxPrice) && maxPrice >= 0) {
+          priceConditions.push({ 'packages.price': { $lte: maxPrice } });
+        }
+      }
+      
+      // Only apply price filter if there are valid price conditions
+      if (priceConditions.length > 0) {
+        queryObj.$and = priceConditions;
       }
     }
 
@@ -316,10 +345,12 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
     if (req.query.sort) {
       switch (req.query.sort) {
         case 'price-asc':
-          sortOption = { 'packages.price': 1 };
+          // Sort by price ascending, events without packages will be at the end
+          sortOption = { 'packages.price': 1, createdAt: -1 };
           break;
         case 'price-desc':
-          sortOption = { 'packages.price': -1 };
+          // Sort by price descending, events without packages will be at the end
+          sortOption = { 'packages.price': -1, createdAt: -1 };
           break;
         case 'rating-desc':
           sortOption = { averageRating: -1 };
@@ -344,7 +375,7 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
       .sort(sortOption)
       .skip(skip)
       .limit(limit)
-      .select('name slug category description imageUrls location averageRating totalReviews tags createdAt packages flatPrice flexible_price')
+      .select('name slug category description imageUrls location averageRating totalReviews tags createdAt packages flatPrice flexible_price offerings')
       .populate({
         path: 'vendor',
         select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'
@@ -447,7 +478,7 @@ exports.getVendorEvents = catchAsync(async (req, res) => {
     .skip(skip)
     .limit(limit)
     .populate('vendor', 'vendorProfile.businessName vendorProfile.ownerName')
-    .select('name category description imageUrls location packages flatPrice services tags createdAt averageRating totalReviews');
+    .select('name category description imageUrls location packages flatPrice services offerings tags createdAt averageRating totalReviews');
 
   // Get total count for pagination
   const totalEvents = await Event.countDocuments(query);

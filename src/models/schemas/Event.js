@@ -112,7 +112,12 @@ const eventSchema = new mongoose.Schema({
   },
   services: {
     type: [String],
-    required: true
+    required: false // Made optional for backward compatibility
+  },
+  offerings: {
+    type: [String],
+    required: [true, 'Service offerings are required.'],
+    validate: [array => array.length > 0, 'At least one offering must be provided.']
   },
   packages: [packageSchema],
   flatPrice: {
