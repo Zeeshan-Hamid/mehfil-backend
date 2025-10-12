@@ -241,7 +241,7 @@ class EmailService {
     // Sending vendor verification request email
     
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'zeeshanhamid03@gmail.com';
+    const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'info@mehfil.app';
     const title = '🔍 Vendor Verification Request - Action Required';
     
     // Email configuration loaded
