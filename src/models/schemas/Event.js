@@ -112,7 +112,22 @@ const eventSchema = new mongoose.Schema({
   },
   services: {
     type: [String],
-    required: true
+    required: false // Made optional for backward compatibility
+  },
+  offerings: {
+    type: [String],
+    required: false, // Made optional for backward compatibility with existing events
+    validate: {
+      validator: function(array) {
+        // If array is null, undefined, or empty, it's valid (optional field)
+        if (!array || array.length === 0) {
+          return true;
+        }
+        // If array has items, all items must be non-empty strings
+        return array.every(item => typeof item === 'string' && item.trim().length > 0);
+      },
+      message: 'If provided, offerings must be non-empty strings.'
+    }
   },
   packages: [packageSchema],
   flatPrice: {

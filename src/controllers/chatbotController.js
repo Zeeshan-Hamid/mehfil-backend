@@ -209,7 +209,425 @@ Remember: You are Mehfil's customer assistant only. Stay focused on helping cust
   }
 };
 
+const generateOfferings = async (req, res) => {
+  try {
+    const { businessDescription, category } = req.body;
+
+    if (!businessDescription || !category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Business description and category are required'
+      });
+    }
+
+    // Validate category to prevent misuse
+    const allowedCategories = [
+      'Drinks', 'Desserts', 'Decor', 'Henna', 'Food', 'Videography', 
+      'Venue Management', 'Entertainment', 'Hair', 'Makeup', 'Photography', 
+      'Catering', 'Wedding Planner', 'Event Planner', 'Other'
+    ];
+
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid category provided'
+      });
+    }
+
+    const openaiClient = getOpenAIClient();
+
+    // Strict prompt engineering for offerings generation
+    const systemPrompt = `You are an AI assistant specialized in generating professional service offerings for event planning businesses on the Mehfil platform. Your ONLY task is to analyze business descriptions and generate relevant, professional service offerings.
+
+**STRICT REQUIREMENTS:**
+1. You MUST only generate service offerings related to the provided business description and category
+2. You MUST return ONLY a JSON array of strings, no other text or formatting
+3. You MUST generate 5-12 relevant offerings maximum
+4. You MUST use professional, clear language suitable for business listings
+5. You MUST focus on specific services, not generic categories
+6. You MUST NOT include pricing, costs, or time estimates
+7. You MUST NOT include personal information or contact details
+8. You MUST NOT generate offerings unrelated to the business description
+
+**OUTPUT FORMAT:**
+Return ONLY a valid JSON array like this:
+["Service 1", "Service 2", "Service 3"]
+
+**EXAMPLES:**
+For Photography: ["Professional photo editing", "Online gallery access", "Multiple photographer coverage", "Engagement session", "Print packages"]
+For Catering: ["Buffet setup", "Professional serving staff", "Menu customization", "Cleanup services", "Dietary accommodations"]
+
+**VALIDATION RULES:**
+- Each offering must be 2-8 words long
+- Use title case for proper nouns only
+- Be specific and actionable
+- Focus on what the customer receives
+- Avoid vague terms like "quality service" or "best experience"
+
+Remember: You are ONLY generating service offerings. Do not provide explanations, advice, or any other content.`;
+
+    const userPrompt = `Business Category: ${category}
+Business Description: ${businessDescription}
+
+Generate professional service offerings for this business. Return only a JSON array of strings.`;
+
+    const completion = await openaiClient.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.3, // Lower temperature for more consistent, professional output
+    });
+
+    const response = completion.choices[0]?.message?.content || '[]';
+    
+    // Parse and validate the JSON response
+    let offerings;
+    try {
+      offerings = JSON.parse(response);
+      if (!Array.isArray(offerings)) {
+        throw new Error('Response is not an array');
+      }
+      
+      // Validate each offering
+      const validatedOfferings = offerings.filter(offering => {
+        return typeof offering === 'string' && 
+               offering.trim().length > 0 && 
+               offering.length <= 100 &&
+               offering.length >= 2;
+      });
+
+      if (validatedOfferings.length === 0) {
+        throw new Error('No valid offerings generated');
+      }
+
+      res.status(200).json({
+        success: true,
+        offerings: validatedOfferings,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (parseError) {
+      console.error('Error parsing AI response:', parseError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate valid offerings. Please try again.',
+        error: 'Invalid AI response format'
+      });
+    }
+
+  } catch (error) {
+    console.error('Generate offerings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
+const generateDescription = async (req, res) => {
+  try {
+    const { businessName, category, offerings, businessDetails } = req.body;
+
+    if (!businessName || !category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Business name and category are required'
+      });
+    }
+
+    // Validate category to prevent misuse
+    const allowedCategories = [
+      'Drinks', 'Desserts', 'Decor', 'Henna', 'Food', 'Videography', 
+      'Venue Management', 'Entertainment', 'Hair', 'Makeup', 'Photography', 
+      'Catering', 'Wedding Planner', 'Event Planner', 'Other'
+    ];
+
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid category provided'
+      });
+    }
+
+    const openaiClient = getOpenAIClient();
+
+    // Strict prompt engineering for description generation
+    const systemPrompt = `You are an AI assistant specialized in generating professional business descriptions for event planning services on the Mehfil platform. Your ONLY task is to create compelling, professional business descriptions.
+
+**STRICT REQUIREMENTS:**
+1. You MUST generate a professional business description suitable for a vendor listing
+2. You MUST return ONLY the description text, no other formatting or explanations
+3. You MUST keep the description between 50-200 words (maximum 1000 characters)
+4. You MUST use professional, engaging language that attracts customers
+5. You MUST focus on the value proposition and what makes the business special
+6. You MUST include relevant keywords for the category
+7. You MUST NOT include pricing, contact information, or specific dates
+8. You MUST NOT include personal information or testimonials
+9. You MUST NOT use overly promotional language or excessive exclamation marks
+10. You MUST write in third person (e.g., "We provide..." not "I provide...")
+11. You MUST be concise and to the point - prioritize quality over length
+
+**OUTPUT FORMAT:**
+Return ONLY the description text as a single paragraph. No quotes, no formatting, no additional text.
+
+**TONE GUIDELINES:**
+- Professional and trustworthy
+- Engaging but not overly salesy
+- Clear and informative
+- Focus on benefits and value
+- Use active voice when possible
+
+**EXAMPLES:**
+For Photography: "We specialize in capturing life's most precious moments with artistic vision and technical expertise. Our professional photography services include wedding coverage, engagement sessions, and special events. We deliver high-quality images with professional editing and online gallery access, ensuring every detail is captured beautifully to create timeless memories."
+
+Remember: You are ONLY generating a business description. Do not provide explanations, advice, or any other content.`;
+
+    const userPrompt = `Business Name: ${businessName}
+Category: ${category}
+${offerings && offerings.length > 0 ? `Services: ${offerings.join(', ')}` : ''}
+${businessDetails ? `Additional Details: ${businessDetails}` : ''}
+
+Generate a professional business description for this vendor listing. Return only the description text.`;
+
+    const completion = await openaiClient.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ],
+      max_tokens: 300,
+      temperature: 0.4, // Lower temperature for more consistent, professional output
+    });
+
+    const response = completion.choices[0]?.message?.content || '';
+    
+    // Validate the response
+    if (!response || response.trim().length < 50) {
+      throw new Error('Generated description is too short');
+    }
+
+    // Truncate if too long instead of throwing error
+    let finalDescription = response.trim();
+    if (finalDescription.length > 1000) {
+      finalDescription = finalDescription.substring(0, 997) + '...';
+    }
+
+    res.status(200).json({
+      success: true,
+      description: finalDescription,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Generate description error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
+const generatePackage = async (req, res) => {
+  try {
+    const { packageName, pricingMode, category, businessDetails, basePrice } = req.body;
+
+    if (!packageName || !pricingMode || !category) {
+      return res.status(400).json({
+        success: false,
+        message: 'Package name, pricing mode, and category are required'
+      });
+    }
+
+    // Validate pricing mode
+    const allowedPricingModes = ['perAttendee', 'flatPrice'];
+    if (!allowedPricingModes.includes(pricingMode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid pricing mode provided'
+      });
+    }
+
+    // Validate category
+    const allowedCategories = [
+      'Drinks', 'Desserts', 'Decor', 'Henna', 'Food', 'Videography', 
+      'Venue Management', 'Entertainment', 'Hair', 'Makeup', 'Photography', 
+      'Catering', 'Wedding Planner', 'Event Planner', 'Other'
+    ];
+
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid category provided'
+      });
+    }
+
+    const openaiClient = getOpenAIClient();
+
+    // Strict prompt engineering for package generation
+    const systemPrompt = `You are an AI assistant specialized in generating professional event planning packages for the Mehfil platform. Your ONLY task is to create compelling package descriptions and offerings.
+
+**STRICT REQUIREMENTS:**
+1. You MUST generate a professional package description and relevant offerings
+2. You MUST return ONLY a JSON object with specific fields
+3. You MUST keep the description between 30-150 words (maximum 500 characters)
+4. You MUST generate 3-8 relevant offerings for the package
+5. You MUST use professional, engaging language that attracts customers
+6. You MUST focus on the value proposition and what's included
+7. You MUST include relevant keywords for the category
+8. You MUST NOT include pricing, contact information, or specific dates
+9. You MUST NOT include personal information or testimonials
+10. You MUST NOT use overly promotional language or excessive exclamation marks
+11. You MUST write in third person (e.g., "This package includes..." not "I include...")
+12. You MUST be concise and to the point - prioritize quality over length
+13. You MUST NOT include the package name in the description - focus on what's included
+14. You MUST NOT include any pricing information - the vendor will set their own prices
+
+**OUTPUT FORMAT:**
+Return ONLY a valid JSON object like this:
+{
+  "description": "Professional package description here...",
+  "offerings": ["Offering 1", "Offering 2", "Offering 3"]
+}
+
+**PRICING MODE GUIDELINES:**
+- For "perAttendee": Focus on scalable services, mention per-person benefits
+- For "flatPrice": Focus on complete service packages, fixed deliverables
+
+**TONE GUIDELINES:**
+- Professional and trustworthy
+- Engaging but not overly salesy
+- Clear and informative
+- Focus on benefits and value
+- Use active voice when possible
+
+**EXAMPLES:**
+For Photography perAttendee: {
+  "description": "Professional photography coverage that scales with your guest count. Includes multiple photographer coverage, professional editing, and online gallery access. Perfect for capturing every moment of your special day.",
+  "offerings": ["Multiple photographer coverage", "Professional photo editing", "Online gallery access", "High-resolution images", "Same-day preview", "Print-ready files"]
+}
+
+For Catering flatPrice: {
+  "description": "Complete catering solution for your event with professional service and cleanup. Includes buffet setup, serving staff, and all necessary equipment. Perfect for hassle-free event dining.",
+  "offerings": ["Buffet setup and service", "Professional serving staff", "All necessary equipment", "Menu customization", "Cleanup services", "Dietary accommodations"]
+}
+
+Remember: Do NOT include package names or prices in your response. Focus only on what the package includes and delivers.
+
+Remember: You are ONLY generating package content. Do not provide explanations, advice, or any other content.`;
+
+    const userPrompt = `Package Name: ${packageName}
+Pricing Mode: ${pricingMode}
+Category: ${category}
+${businessDetails ? `Business Details: ${businessDetails}` : ''}
+
+Generate a professional package description and offerings for this package. The vendor will set their own price, so focus only on what the package includes and delivers. Return only the JSON object.`;
+
+    const completion = await openaiClient.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ],
+      max_tokens: 400,
+      temperature: 0.3, // Lower temperature for more consistent, professional output
+    });
+
+    const response = completion.choices[0]?.message?.content || '{}';
+    
+    // Clean the response to extract JSON from markdown if present
+    let cleanedResponse = response.trim();
+    
+    // Remove markdown code blocks if present
+    if (cleanedResponse.startsWith('```json')) {
+      cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanedResponse.startsWith('```')) {
+      cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    
+    // Parse and validate the JSON response
+    let packageData;
+    try {
+      packageData = JSON.parse(cleanedResponse);
+      
+      if (!packageData.description || !packageData.offerings) {
+        throw new Error('Missing required fields in response');
+      }
+      
+      if (!Array.isArray(packageData.offerings)) {
+        throw new Error('Offerings must be an array');
+      }
+      
+      // Validate description length
+      if (packageData.description.length > 500) {
+        packageData.description = packageData.description.substring(0, 497) + '...';
+      }
+      
+      // Validate offerings
+      const validatedOfferings = packageData.offerings.filter(offering => {
+        return typeof offering === 'string' && 
+               offering.trim().length > 0 && 
+               offering.length <= 100 &&
+               offering.length >= 2;
+      });
+
+      if (validatedOfferings.length === 0) {
+        throw new Error('No valid offerings generated');
+      }
+
+      packageData.offerings = validatedOfferings;
+
+      res.status(200).json({
+        success: true,
+        package: packageData,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (parseError) {
+      console.error('Error parsing AI response:', parseError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate valid package content. Please try again.',
+        error: 'Invalid AI response format'
+      });
+    }
+
+  } catch (error) {
+    console.error('Generate package error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   vendorChatbot,
-  customerChatbot
+  customerChatbot,
+  generateOfferings,
+  generateDescription,
+  generatePackage
 }; 

@@ -394,7 +394,7 @@ exports.addComment = async (req, res) => {
     const comment = {
       user: req.user._id,
       content,
-      isApproved: false // Comments need approval by default
+      isApproved: true // Comments are immediately visible
     };
 
     blog.comments.push(comment);
@@ -699,8 +699,7 @@ exports.getPublicBlogBySlug = async (req, res) => {
       .populate('author', 'authorName authorBio authorImage')
       .populate({
         path: 'comments.user',
-        select: 'customerProfile.fullName customerProfile.profileImage',
-        match: { isApproved: true }
+        select: 'customerProfile.fullName customerProfile.profileImage'
       });
 
     if (!blog) {
@@ -801,7 +800,7 @@ exports.addPublicComment = async (req, res) => {
     const newComment = {
       user: userId,
       content: content.trim(),
-      isApproved: false // Comments need approval
+      isApproved: true // Comments are immediately visible
     };
 
     blog.comments.push(newComment);
@@ -809,7 +808,7 @@ exports.addPublicComment = async (req, res) => {
 
     res.status(201).json({
       status: 'success',
-      message: 'Comment added successfully. It will be visible after approval.',
+      message: 'Comment added successfully.',
       data: {
         comment: newComment
       }
