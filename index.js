@@ -46,27 +46,24 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: true, // Allow all origins
+    origin: process.env.NODE_ENV === 'production' 
+      ? [process.env.FRONTEND_URL, 'https://www.mehfil.app', 'https://mehfil.app']
+      : true, // Allow all origins in development
     methods: ["GET", "POST"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"]
   },
   transports: ['websocket', 'polling'],
-  allowEIO3: true
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e6
 });
 
-// Add connection logging
-io.on('connection', (socket) => {
- 
-  
-  socket.on('disconnect', (reason) => {
-
-  });
-  
-  socket.on('error', (error) => {
-
-  });
-});
+// Initialize Socket.IO service
+const socketService = new SocketService(io);
+app.set('socketService', socketService);
 
 const PORT = process.env.PORT || 8000;
 
@@ -99,10 +96,6 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   next();
 });
-
-// Initialize Socket.IO service
-const socketService = new SocketService(io);
-app.set('socketService', socketService);
 
 // Initialize Cron service
 cronService.init();
