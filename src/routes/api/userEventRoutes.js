@@ -12,6 +12,10 @@ router.route('/')
   .get(userEventController.getAllUserEvents)
   .post(userEventController.createUserEvent);
 
+// AI-powered event creation
+router.route('/ai-create')
+  .post(userEventController.createAIEvent);
+
 router.route('/stats')
   .get(userEventController.getEventStats);
 
