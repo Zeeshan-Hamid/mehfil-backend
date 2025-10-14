@@ -71,6 +71,41 @@ const userEventSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [5000, 'Event notes cannot exceed 5000 characters']
+  },
+  eventType: {
+    type: String,
+    enum: ['Wedding', 'Birthday', 'Graduation', 'Corporate', 'Engagement', 'Anniversary', 'Other'],
+    default: 'Other'
+  },
+  theme: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Theme cannot exceed 200 characters']
+  },
+  specialRequirements: {
+    type: [String],
+    default: []
+  },
+  aiGenerated: {
+    type: Boolean,
+    default: false
+  },
+  checklistCategories: {
+    type: [{
+      name: String,
+      icon: String,
+      tasks: [{
+        taskName: String,
+        timelinePhase: String,
+        priority: {
+          type: String,
+          enum: ['high', 'medium', 'low'],
+          default: 'medium'
+        },
+        description: String
+      }]
+    }],
+    default: []
   }
 }, {
   timestamps: true,

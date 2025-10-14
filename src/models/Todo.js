@@ -48,6 +48,30 @@ const todoSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [1000, 'Description cannot exceed 1000 characters']
+  },
+  category: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Category cannot exceed 100 characters']
+  },
+  timelinePhase: {
+    type: String,
+    enum: ['6+ months before', '3-6 months before', '1-3 months before', '1 month before', '1-2 weeks before', '1 week before', 'Day of event'],
+    default: '1 month before'
+  },
+  priority: {
+    type: String,
+    enum: ['high', 'medium', 'low'],
+    default: 'medium'
+  },
+  suggestedVendors: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: 'User',
+    default: []
+  },
+  aiGenerated: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,

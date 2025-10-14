@@ -216,7 +216,74 @@ exports.deleteUserEvent = catchAsync(async (req, res) => {
   });
 });
 
+// Helper function to calculate start date based on timeline phase
+const calculateStartDate = (eventDate, timelinePhase) => {
+  const event = new Date(eventDate);
+  const phases = {
+    '6+ months before': 6 * 30, // 6 months in days
+    '3-6 months before': 4.5 * 30, // 4.5 months in days
+    '1-3 months before': 2 * 30, // 2 months in days
+    '1 month before': 30, // 1 month in days
+    '1-2 weeks before': 10, // 1.5 weeks in days
+    '1 week before': 7, // 1 week in days
+    'Day of event': 0 // Same day
+  };
+  
+  const daysBefore = phases[timelinePhase] || 30;
+  const startDate = new Date(event);
+  startDate.setDate(startDate.getDate() - daysBefore);
+  return startDate;
+};
 
+// @desc    Create AI-powered event with checklist
+// @route   POST /api/user-events/ai-create
+// @access  Private (Customer only)
+exports.createAIEvent = catchAsync(async (req, res) => {
+  if (req.user.role !== 'customer') {
+    return res.status(403).json({
+      status: 'fail',
+      message: 'Only customers can create user events'
+    });
+  }
+
+  const { eventData, checklist } = req.body;
+  
+  // Create the event
+  const userEvent = await UserEvent.create({
+    ...eventData,
+    user: req.user.id,
+    aiGenerated: true,
+    checklistCategories: checklist.categories
+  });
+
+  // Create todos from checklist categories
+  const todos = [];
+  for (const category of checklist.categories) {
+    for (const task of category.tasks) {
+      const todo = await Todo.create({
+        userEvent: userEvent._id,
+        user: req.user.id,
+        taskName: task.taskName,
+        category: category.name,
+        timelinePhase: task.timelinePhase,
+        priority: task.priority,
+        description: task.description,
+        startDate: calculateStartDate(eventData.date, task.timelinePhase),
+        endDate: new Date(eventData.date),
+        aiGenerated: true
+      });
+      todos.push(todo);
+    }
+  }
+
+  res.status(201).json({
+    status: 'success',
+    data: {
+      userEvent,
+      todos
+    }
+  });
+});
 
 // @desc    Get event statistics
 // @route   GET /api/user-events/stats
