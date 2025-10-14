@@ -251,9 +251,9 @@ exports.getEventReviewSummary = catchAsync(async (req, res) => {
     })
     .join('\n');
 
-  const systemPrompt = `You are an assistant that writes very concise, neutral summaries of customer reviews for an event listing. Capture common themes, sentiment, strengths/weaknesses, and any consistent complaints. Keep it factual and avoid exaggeration. Output 2-4 sentences only.`;
+  const systemPrompt = `You are an assistant that writes concise summaries of customer reviews. Focus on ratings and clear feedback. If comments are unclear or unhelpful, analyze based on ratings only. Be direct and factual. Output 1-2 sentences maximum.`;
 
-  const userPrompt = `Event: ${event.name || 'Listing'}\nYou are given the 30 most recent reviews. Write a concise summary of what customers are saying.\n\nReviews:\n${reviewsText}`;
+  const userPrompt = `Event: ${event.name || 'Listing'}\nAnalyze these reviews and provide a brief summary:\n\nReviews:\n${reviewsText}`;
 
   // Generate with OpenAI
   const openai = getOpenAIClient();
@@ -263,8 +263,8 @@ exports.getEventReviewSummary = catchAsync(async (req, res) => {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ],
-    max_tokens: 220,
-    temperature: 0.3
+    max_tokens: 100,
+    temperature: 0.2
   });
 
   const summary = completion.choices?.[0]?.message?.content?.trim() || null;
