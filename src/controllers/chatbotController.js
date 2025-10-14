@@ -624,10 +624,165 @@ Generate a professional package description and offerings for this package. The 
   }
 };
 
+const generateEventChecklist = async (req, res) => {
+  try {
+    const { 
+      eventType, 
+      eventDate, 
+      guestCount, 
+      budget, 
+      location, 
+      theme, 
+      specialRequirements,
+      planningThoughts 
+    } = req.body;
+
+    // Validation
+    if (!eventType || !eventDate || !guestCount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event type, date, and guest count are required'
+      });
+    }
+
+    const openaiClient = getOpenAIClient();
+
+    const systemPrompt = `You are an expert wedding and event planner AI. Generate a comprehensive event planning checklist with vendor categories and timeline-based tasks.
+
+**STRICT REQUIREMENTS:**
+1. Return ONLY a valid JSON object with the exact structure specified - NO markdown formatting, NO code blocks, NO explanations
+2. Generate 8-12 vendor categories relevant to the event type
+3. For each category, generate 3-8 specific tasks organized by timeline
+4. Include priority levels (high/medium/low) for each task
+5. Tasks must be actionable and specific
+6. Timeline phases: "6+ months before", "3-6 months before", "1-3 months before", "1 month before", "1-2 weeks before", "1 week before", "Day of event"
+7. Start your response directly with { and end with } - no other text
+8. Pay special attention to the user's event vision and planning thoughts - incorporate their specific concerns, preferences, and ideas into the tasks
+9. If the user mentions budget concerns, include cost-saving tips in task descriptions
+10. If the user mentions specific themes or styles, tailor tasks to support that vision
+11. If the user mentions accessibility or special needs, include relevant tasks
+
+**OUTPUT FORMAT:**
+{
+  "eventTitle": "Suggested event title",
+  "eventDescription": "Brief description of the event",
+  "categories": [
+    {
+      "name": "Category Name",
+      "icon": "icon-name",
+      "tasks": [
+        {
+          "taskName": "Specific task description",
+          "timelinePhase": "Timeline phase",
+          "priority": "high|medium|low",
+          "description": "Detailed task description"
+        }
+      ]
+    }
+  ]
+}
+
+**VENDOR CATEGORIES** (select relevant based on event type):
+Photography, Videography, Venue, Catering, Decor, Entertainment, Hair & Makeup, Wedding Planner, Florist, DJ/Music, Invitations, Transportation, Accommodations, Cake & Desserts, Drinks & Bar, Henna, Attire, Gifts & Favors
+
+**EXAMPLE FOR WEDDING:**
+{
+  "eventTitle": "Wedding Celebration",
+  "eventDescription": "A beautiful wedding celebration for [guest count] guests",
+  "categories": [
+    {
+      "name": "Venue",
+      "icon": "venue",
+      "tasks": [
+        {
+          "taskName": "Research and shortlist 5-8 venues",
+          "timelinePhase": "6+ months before",
+          "priority": "high",
+          "description": "Visit potential venues that accommodate your guest count and match your theme"
+        },
+        {
+          "taskName": "Book final venue and sign contract",
+          "timelinePhase": "6+ months before",
+          "priority": "high",
+          "description": "Secure your venue with deposit and review all terms"
+        }
+      ]
+    }
+  ]
+}`;
+
+    const userPrompt = `Event Type: ${eventType}
+Event Date: ${eventDate}
+Guest Count: ${guestCount}
+Budget: ${budget || 'Not specified'}
+Location: ${location}
+Theme/Style: ${theme || 'Not specified'}
+Special Requirements: ${specialRequirements?.join(', ') || 'None'}
+User's Event Vision and Planning Thoughts: ${planningThoughts || 'No additional details provided'}
+
+Generate a comprehensive event planning checklist that takes into account the user's specific vision, concerns, and preferences mentioned above.`;
+
+    const completion = await openaiClient.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      max_tokens: 3000,
+      temperature: 0.4
+    });
+
+    const response = completion.choices[0]?.message?.content || '{}';
+    
+    // Clean the response - remove markdown code blocks if present
+    let cleanedResponse = response.trim();
+    if (cleanedResponse.startsWith('```json')) {
+      cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanedResponse.startsWith('```')) {
+      cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    
+    // Parse and validate
+    let checklistData;
+    try {
+      checklistData = JSON.parse(cleanedResponse);
+    } catch (parseError) {
+      console.error('Error parsing AI response:', parseError);
+      console.error('Raw response:', response);
+      console.error('Cleaned response:', cleanedResponse);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate valid checklist. Please try again.',
+        error: 'Invalid AI response format'
+      });
+    }
+    
+    // Validate structure
+    if (!checklistData.eventTitle || !checklistData.categories || !Array.isArray(checklistData.categories)) {
+      throw new Error('Invalid AI response structure');
+    }
+
+    res.status(200).json({
+      success: true,
+      checklist: checklistData,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Generate event checklist error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate checklist',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   vendorChatbot,
   customerChatbot,
   generateOfferings,
   generateDescription,
-  generatePackage
+  generatePackage,
+  generateEventChecklist
 }; 
