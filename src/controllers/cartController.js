@@ -162,6 +162,39 @@ exports.addToCart = async (req, res) => {
       console.log('⚠️ [CART] Customer cart not found, initializing...');
       user.customerProfile.customerCart = [];
     }
+
+    // Clean up existing cart items that don't have required fields or have invalid formats
+    const originalCartLength = user.customerProfile.customerCart.length;
+    user.customerProfile.customerCart = user.customerProfile.customerCart.filter(item => {
+      // Check if all required fields exist
+      const hasRequiredFields = item.eventTime && item.eventDate && item.attendees && item.totalPrice !== undefined;
+      
+      // Check if eventTime is in the correct format (HH:MM AM/PM)
+      const isValidEventTimeFormat = item.eventTime && /^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i.test(item.eventTime);
+      
+      const isValid = hasRequiredFields && isValidEventTimeFormat;
+      
+      if (!isValid) {
+        console.log('🧹 [CART] Removing invalid cart item:', {
+          itemId: item._id,
+          hasEventTime: !!item.eventTime,
+          hasEventDate: !!item.eventDate,
+          hasAttendees: !!item.attendees,
+          hasTotalPrice: item.totalPrice !== undefined,
+          isValidEventTimeFormat,
+          eventTimeValue: item.eventTime
+        });
+      }
+      return isValid;
+    });
+
+    if (user.customerProfile.customerCart.length !== originalCartLength) {
+      console.log('🧹 [CART] Cleaned up cart items:', {
+        originalLength: originalCartLength,
+        newLength: user.customerProfile.customerCart.length,
+        removedCount: originalCartLength - user.customerProfile.customerCart.length
+      });
+    }
     
     // Handle both ObjectId and slug for event lookup
     let event = null;
