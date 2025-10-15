@@ -50,8 +50,8 @@ const userEventSchema = new mongoose.Schema({
   },
   icon: {
     type: String,
-    default: '🎉',
-    enum: ['🎉', '👰', '🎂', '🎓', '🏢', '🎯']
+    default: 'party',
+    enum: ['party', 'wedding', 'birthday', 'graduation', 'corporate', 'custom', '🎉', '👰', '🎂', '🎓', '🏢', '🎯']
   },
   isCustomEvent: {
     type: Boolean,
