@@ -341,16 +341,14 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
 
     // 3. Determine sort order
     let sortOption = { createdAt: -1 }; // Default: newest first
+    let useAggregation = false;
     
     if (req.query.sort) {
       switch (req.query.sort) {
         case 'price-asc':
-          // Sort by price ascending, events without packages will be at the end
-          sortOption = { 'packages.price': 1, createdAt: -1 };
-          break;
         case 'price-desc':
-          // Sort by price descending, events without packages will be at the end
-          sortOption = { 'packages.price': -1, createdAt: -1 };
+          // For price sorting, we need to use aggregation to calculate the minimum price
+          useAggregation = true;
           break;
         case 'rating-desc':
           sortOption = { averageRating: -1 };
@@ -371,20 +369,146 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
    
     
     // 4. Execute query with pagination
-    const events = await Event.find(queryObj)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limit)
-      .select('name slug category description imageUrls location averageRating totalReviews tags createdAt packages flatPrice flexible_price offerings')
-      .populate({
-        path: 'vendor',
-        select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'
-      });
+    let events, totalEvents;
     
-  
-    
-    // 5. Get total count for pagination
-    const totalEvents = await Event.countDocuments(queryObj);
+    if (useAggregation) {
+      // Use aggregation pipeline for price sorting
+      const pipeline = [
+        { $match: queryObj },
+        {
+          $addFields: {
+            // Calculate minimum price based on the same logic as frontend
+            minPrice: {
+              $let: {
+                vars: {
+                  perPersonPackages: {
+                    $filter: {
+                      input: "$packages",
+                      cond: {
+                        $or: [
+                          { $eq: ["$$this.pricingMode", "perAttendee"] },
+                          { $eq: ["$$this.pricingMode", null] },
+                          { $not: { $ifNull: ["$$this.pricingMode", false] } }
+                        ]
+                      }
+                    }
+                  },
+                  flatPricePackages: {
+                    $filter: {
+                      input: "$packages",
+                      cond: { $eq: ["$$this.pricingMode", "flatPrice"] }
+                    }
+                  },
+                  hasLegacyFlatPrice: {
+                    $and: [
+                      { $ne: ["$flatPrice", null] },
+                      { $eq: ["$flatPrice.isActive", true] },
+                      { $ne: ["$flatPrice.amount", null] }
+                    ]
+                  }
+                },
+                in: {
+                  $let: {
+                    vars: {
+                      hasPerPersonPackages: { $gt: [{ $size: "$$perPersonPackages" }, 0] },
+                      hasFlatPricePackages: { $gt: [{ $size: "$$flatPricePackages" }, 0] }
+                    },
+                    in: {
+                      $cond: {
+                        if: {
+                          $and: [
+                            "$$hasPerPersonPackages",
+                            { $or: ["$$hasFlatPricePackages", "$$hasLegacyFlatPrice"] }
+                          ]
+                        },
+                        then: { $min: "$$perPersonPackages.price" },
+                        else: {
+                          $cond: {
+                            if: {
+                              $and: [
+                                "$$hasPerPersonPackages",
+                                { $not: "$$hasFlatPricePackages" },
+                                { $not: "$$hasLegacyFlatPrice" }
+                              ]
+                            },
+                            then: { $min: "$$perPersonPackages.price" },
+                            else: {
+                              $cond: {
+                                if: {
+                                  $and: [
+                                    "$$hasFlatPricePackages",
+                                    { $not: "$$hasPerPersonPackages" }
+                                  ]
+                                },
+                                then: { $min: "$$flatPricePackages.price" },
+                                else: {
+                                  $cond: {
+                                    if: {
+                                      $and: [
+                                        "$$hasLegacyFlatPrice",
+                                        { $not: "$$hasPerPersonPackages" },
+                                        { $not: "$$hasFlatPricePackages" }
+                                      ]
+                                    },
+                                    then: "$flatPrice.amount",
+                                    else: null
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          $sort: req.query.sort === 'price-asc' 
+            ? { minPrice: 1, createdAt: -1 } 
+            : { minPrice: -1, createdAt: -1 }
+        },
+        { $skip: skip },
+        { $limit: limit },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'vendor',
+            foreignField: '_id',
+            as: 'vendor',
+            pipeline: [
+              {
+                $project: {
+                  'vendorProfile.businessName': 1,
+                  'vendorProfile.profileImage': 1,
+                  'vendorProfile.rating': 1
+                }
+              }
+            ]
+          }
+        },
+        { $unwind: '$vendor' }
+      ];
+      
+      events = await Event.aggregate(pipeline);
+      totalEvents = await Event.countDocuments(queryObj);
+    } else {
+      // Use regular find for non-price sorting
+      events = await Event.find(queryObj)
+        .sort(sortOption)
+        .skip(skip)
+        .limit(limit)
+        .select('name slug category description imageUrls location averageRating totalReviews tags createdAt packages flatPrice flexible_price offerings')
+        .populate({
+          path: 'vendor',
+          select: 'vendorProfile.businessName vendorProfile.profileImage vendorProfile.rating'
+        });
+      
+      totalEvents = await Event.countDocuments(queryObj);
+    }
  
 
     // 6. Send response
