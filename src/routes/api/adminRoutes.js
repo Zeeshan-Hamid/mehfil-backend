@@ -10,7 +10,7 @@ const {
   // Vendors
   updateVendorFlags, updateVendorHalal,
   // Vendor Verification
-  listVendorsForVerification, updateVendorVerification,
+  listVendorsForVerification, updateVendorVerification, listVendorsForSelection,
   // Events
   listEvents, createEventForVendor, updateEvent, deleteEvent, toggleEventFeatured,
   // Bookings
@@ -56,11 +56,12 @@ router.patch('/vendors/:id/halal', updateVendorHalal);
 
 // Vendor Verification
 router.get('/vendors/verification', listVendorsForVerification);
+router.get('/vendors/selection', listVendorsForSelection);
 router.patch('/vendors/:id/verification', updateVendorVerification);
 
 // Events (Listings)
 router.get('/events', listEvents);
-router.post('/events', createEventForVendor);
+router.post('/events', uploadInMemory.array('images', 10), createEventForVendor);
 router.patch('/events/:id', updateEvent);
 router.delete('/events/:id', deleteEvent);
 router.patch('/events/:id/featured', toggleEventFeatured);

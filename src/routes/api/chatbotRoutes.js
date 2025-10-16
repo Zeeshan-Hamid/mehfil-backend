@@ -9,11 +9,11 @@ router.post('/vendor-chat', protect, restrictTo('vendor'), vendorChatbot);
 // Customer chatbot endpoint - requires authentication (any user can use)
 router.post('/customer-chat', protect, customerChatbot);
 
-// AI offerings generation endpoint - requires authentication and vendor role
-router.post('/generate-offerings', protect, restrictTo('vendor'), generateOfferings);
+// AI offerings generation endpoint - requires authentication and vendor or admin role
+router.post('/generate-offerings', protect, restrictTo('vendor', 'admin'), generateOfferings);
 
-// AI description generation endpoint - requires authentication and vendor role
-router.post('/generate-description', protect, restrictTo('vendor'), generateDescription);
+// AI description generation endpoint - requires authentication and vendor or admin role
+router.post('/generate-description', protect, restrictTo('vendor', 'admin'), generateDescription);
 
 // AI package generation endpoint - requires authentication and vendor role
 router.post('/generate-package', protect, restrictTo('vendor'), generatePackage);

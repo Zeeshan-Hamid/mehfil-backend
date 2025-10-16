@@ -13,7 +13,7 @@ const CheckoutSession = require('../models/CheckoutSession'); // Added for vendo
 const Message = require('../models/Message'); // Added for vendor deletion cascade
 const ViewCount = require('../models/ViewCount'); // Added for vendor deletion cascade
 const PromotionalEvent = require('../models/PromotionalEvent');
-const { processAndUploadPromotionalEventImages } = require('../services/fileUploadService');
+const { processAndUploadPromotionalEventImages, processAndUploadImages } = require('../services/fileUploadService');
 
 const catchAsync = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -157,6 +157,17 @@ exports.getOverview = catchAsync(async (req, res) => {
 });
 
 // ---------- VENDOR VERIFICATION ----------
+exports.listVendorsForSelection = catchAsync(async (req, res) => {
+  const vendors = await User.find({ role: 'vendor' })
+    .select('_id vendorProfile.businessName vendorProfile.ownerName email')
+    .sort({ 
+      'vendorProfile.businessName': 1,
+      'vendorProfile.ownerName': 1,
+      'email': 1 
+    });
+  res.status(200).json({ success: true, data: { vendors } });
+});
+
 exports.listVendorsForVerification = catchAsync(async (req, res) => {
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 10;
@@ -674,19 +685,61 @@ exports.listEvents = catchAsync(async (req, res) => {
 exports.createEventForVendor = catchAsync(async (req, res) => {
   const { vendorId } = req.body;
   if (!vendorId) return res.status(400).json({ success: false, message: 'vendorId is required' });
+  
   const vendor = await User.findOne({ _id: vendorId, role: 'vendor' }).select('_id');
   if (!vendor) return res.status(404).json({ success: false, message: 'Vendor not found' });
 
+  // Check if files were uploaded
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'You must upload at least one image for the event.'
+    });
+  }
+
+  // Process and upload images, get back the S3 URLs
+  const imageUrls = await processAndUploadImages(req.files, vendorId);
+
+  // Parse stringified JSON fields from form-data
   const eventData = { ...req.body };
-  delete eventData.vendorId;
-  // Require at least name, category, description, imageUrls, services, location
-  const required = ['name', 'category', 'description', 'imageUrls', 'services', 'location'];
-  const missing = required.filter((k) => eventData[k] === undefined);
-  if (missing.length) return res.status(400).json({ success: false, message: `Missing fields: ${missing.join(', ')}` });
+  delete eventData.vendorId; // Remove vendorId from event data
+  
+  if (eventData.location) eventData.location = JSON.parse(eventData.location);
+  if (eventData.offerings && eventData.offerings !== '[]' && eventData.offerings !== '') {
+    try {
+      eventData.offerings = JSON.parse(eventData.offerings);
+    } catch (parseError) {
+      console.error('Error parsing offerings:', parseError);
+      eventData.offerings = [];
+    }
+  } else {
+    eventData.offerings = []; // Default to empty array if not provided
+  }
+  if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
+  if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
+  
+  // Handle boolean fields that come as strings from form-data
+  if (eventData.flexible_price !== undefined) {
+    eventData.flexible_price = eventData.flexible_price === 'true' || eventData.flexible_price === true;
+  }
+
+  // Require at least name, category, description, location, offerings
+  const required = ['name', 'category', 'description', 'location', 'offerings'];
+  const missing = required.filter((k) => !eventData[k] || (Array.isArray(eventData[k]) && eventData[k].length === 0));
+  if (missing.length) return res.status(400).json({ success: false, message: `Missing required fields: ${missing.join(', ')}` });
+
+  // Validate location fields
+  if (!eventData.location.city || !eventData.location.state || !eventData.location.zipCode) {
+    return res.status(400).json({ success: false, message: 'Location must include city, state, and zipCode' });
+  }
 
   try {
-    const event = await Event.create({ ...eventData, vendor: vendor._id });
-    res.status(201).json({ success: true, message: 'Event created', data: { event } });
+    const event = await Event.create({ 
+      ...eventData, 
+      vendor: vendor._id,
+      imageUrls 
+    });
+    res.status(201).json({ success: true, message: 'Event created successfully', data: { event } });
   } catch (e) {
     if (e.code === 11000) {
       return res.status(409).json({ success: false, message: 'Duplicate event for this vendor (name/category must be unique per vendor)' });
@@ -1351,6 +1404,7 @@ module.exports = {
   deleteUser: exports.deleteUser,
   updateVendorFlags: exports.updateVendorFlags,
   updateVendorHalal: exports.updateVendorHalal,
+  listVendorsForSelection: exports.listVendorsForSelection,
   listVendorsForVerification: exports.listVendorsForVerification,
   updateVendorVerification: exports.updateVendorVerification,
   listEvents: exports.listEvents,
