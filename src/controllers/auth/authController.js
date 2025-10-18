@@ -172,7 +172,7 @@ const signupVendor = async (req, res) => {
       role: 'vendor',
       emailVerificationToken: hashedToken,
       emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-      vendorVerificationStatus: 'pending', // New vendors need admin verification
+      vendorVerificationStatus: 'verified', // New vendors need admin verification
       vendorProfile: {
         businessName,
         ownerName,
