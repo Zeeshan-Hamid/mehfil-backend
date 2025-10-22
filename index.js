@@ -131,10 +131,11 @@ app.use((error, req, res, next) => {
 });
 
 
-// Start server
-server.listen(PORT, () => {
+// Start server - bind to 0.0.0.0 to be accessible from network
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Network access: Server is accessible on your local network`);
 });
 
 module.exports = app;

@@ -6,14 +6,14 @@ const User = require('../models/User');
 const getOAuthConfig = (req) => {
   const isMobile = req.platform && req.platform.isMobile;
   
-  if (isMobile) {
-    return {
-      clientID: process.env.GOOGLE_MOBILE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_MOBILE_CLIENT_SECRET || '', // iOS doesn't use client secret
-      callbackURL: process.env.GOOGLE_MOBILE_REDIRECT_URI,
-      scope: ['openid', 'email', 'profile']
-    };
-  } else {
+      if (isMobile) {
+        return {
+          clientID: process.env.GOOGLE_CLIENT_ID, // Use web client ID for mobile too
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          callbackURL: 'https://auth.expo.io/@ikhan98/mehfil-app',
+          scope: ['openid', 'email', 'profile']
+        };
+      } else {
     return {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -24,13 +24,13 @@ const getOAuthConfig = (req) => {
 };
 
 module.exports = function(passport) {
-  // Web OAuth Strategy
+  // Web OAuth Strategy (also used for mobile)
   passport.use('google-web',
     new GoogleStrategy(
       {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: process.env.GOOGLE_REDIRECT_URI,
+        callbackURL: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8000/api/auth/google/callback',
         passReqToCallback: true,
         scope: ['openid', 'email', 'profile']
       },
@@ -77,9 +77,15 @@ module.exports = function(passport) {
           
           // If user doesn't exist, create a new one
           // Get role from state parameter in the request
-          const role = req.query.state || req.body.state; // 'customer' or 'vendor'
+          let role = req.query.state || req.body.state; // 'customer', 'vendor', or 'mobile:customer', 'mobile:vendor'
+          
+          // Extract role if it's in mobile:role format
+          if (role && role.startsWith('mobile:')) {
+            role = role.split(':')[1];
+          }
 
           if (!role || !['customer', 'vendor'].includes(role)) {
+            console.error('❌ Invalid role:', role);
             return done(new Error('Invalid role specified for Google OAuth'), null);
           }
 
@@ -201,6 +207,14 @@ module.exports = function(passport) {
 
           await newUser.save({ validateBeforeSave: false });
           
+          console.log('\n========================================');
+          console.log('✅ NEW USER CREATED VIA GOOGLE OAUTH');
+          console.log('========================================');
+          console.log('Email:', newUser.email);
+          console.log('Role:', newUser.role);
+          console.log('Google ID:', newUser.socialLogin.googleId);
+          console.log('========================================\n');
+          
           // Note: Admin notification for Google OAuth vendors will be sent when they complete their profile
           // This is because Google OAuth vendors start with incomplete profiles and need to complete onboarding
           
@@ -209,10 +223,22 @@ module.exports = function(passport) {
           newUserResponse.profileCompleted = role === 'customer' ? 
             newUser.customerProfile.profileCompleted : 
             newUser.vendorProfile.profileCompleted;
+          
+          console.log('👤 Passing user to Passport callback:', {
+            email: newUserResponse.email,
+            role: newUserResponse.role,
+            profileCompleted: newUserResponse.profileCompleted
+          });
+          
           done(null, newUserResponse);
 
         } catch (err) {
-          console.error('Google Strategy Error:', err);
+          console.error('\n========================================');
+          console.error('❌ GOOGLE STRATEGY ERROR');
+          console.error('========================================');
+          console.error('Error:', err.message);
+          console.error('Stack:', err.stack);
+          console.error('========================================\n');
           done(err, false);
         }
       }

@@ -417,6 +417,246 @@ router.get('/google/failure', detectPlatform, (req, res) => {
 });
 
 // iOS-specific OAuth routes for better iOS app integration
+// Mobile-specific routes (simplified direct flow)
+// @route   GET /api/auth/google/mobile/customer
+// @desc    Initiate Google OAuth for mobile customer
+// @access  Public
+router.get('/google/mobile/customer', detectPlatform, (req, res, next) => {
+  req.platform = { type: 'mobile', isMobile: true, isWeb: false };
+  req.query.state = 'mobile:customer'; // Add mobile: prefix to identify mobile flow
+  
+  console.log('\n========================================');
+  console.log('📱 MOBILE OAUTH FLOW INITIATED');
+  console.log('========================================');
+  console.log('Role: Customer');
+  console.log('Platform:', req.platform);
+  console.log('User Agent:', req.headers['user-agent']);
+  console.log('State:', req.query.state);
+  console.log('========================================\n');
+  
+  passport.authenticate('google-web', {
+    state: 'mobile:customer',
+    session: false,
+    scope: ['openid', 'email', 'profile']
+  })(req, res, next);
+});
+
+// @route   GET /api/auth/google/mobile/vendor
+// @desc    Initiate Google OAuth for mobile vendor
+// @access  Public
+router.get('/google/mobile/vendor', detectPlatform, (req, res, next) => {
+  req.platform = { type: 'mobile', isMobile: true, isWeb: false };
+  req.query.state = 'mobile:vendor'; // Add mobile: prefix to identify mobile flow
+  
+  console.log('\n========================================');
+  console.log('📱 MOBILE OAUTH FLOW INITIATED');
+  console.log('========================================');
+  console.log('Role: Vendor');
+  console.log('Platform:', req.platform);
+  console.log('User Agent:', req.headers['user-agent']);
+  console.log('State:', req.query.state);
+  console.log('========================================\n');
+  
+  passport.authenticate('google-web', {
+    state: 'mobile:vendor',
+    session: false,
+    scope: ['openid', 'email', 'profile']
+  })(req, res, next);
+});
+
+// @route   GET /api/auth/google/callback (used for both web and mobile)
+// @desc    Handle Google OAuth callback
+// @access  Public
+router.get('/google/callback',
+  detectPlatform,
+  passport.authenticate('google-web', { session: false, failureRedirect: '/api/auth/google/failure' }),
+  (req, res) => {
+    // Check if this is a mobile auth request by checking the state parameter
+    const state = req.query.state || '';
+    const isMobile = state.startsWith('mobile:');
+    const role = isMobile ? state.split(':')[1] : state;
+    
+    console.log('\n========================================');
+    console.log('🔄 GOOGLE OAUTH CALLBACK RECEIVED');
+    console.log('========================================');
+    console.log('State parameter:', state);
+    console.log('Is Mobile:', isMobile);
+    console.log('Role:', role);
+    console.log('User Email:', req.user.email);
+    console.log('User Role:', req.user.role);
+    console.log('========================================\n');
+    
+    if (isMobile) {
+      // Mobile flow - redirect to app with deep link
+      try {
+        const token = generateToken(req.user._id);
+        
+        const userResponse = req.user.toObject();
+        userResponse.profileCompleted = req.user.role === 'customer' ? 
+          req.user.customerProfile.profileCompleted : 
+          req.user.vendorProfile.profileCompleted;
+        
+        console.log('\n========================================');
+        console.log('✅ MOBILE AUTH SUCCESS');
+        console.log('========================================');
+        console.log('User:', req.user.email);
+        console.log('Role:', req.user.role);
+        console.log('Token generated:', token.substring(0, 20) + '...');
+        console.log('Profile completed:', userResponse.profileCompleted);
+        console.log('========================================\n');
+        
+        // Redirect back to the app with the token and user data
+        const userData = encodeURIComponent(JSON.stringify({
+          _id: userResponse._id,
+          email: userResponse.email,
+          role: userResponse.role,
+          profileCompleted: userResponse.profileCompleted,
+          vendorProfile: userResponse.role === 'vendor' ? {
+            ownerName: userResponse.vendorProfile.ownerName,
+            businessName: userResponse.vendorProfile.businessName
+          } : undefined,
+          customerProfile: userResponse.role === 'customer' ? {
+            fullName: userResponse.customerProfile.fullName
+          } : undefined
+        }));
+        
+        const redirectUrl = `mehfilapp://auth/callback?token=${token}&user=${userData}`;
+        
+        console.log('🔗 Deep Link URL:', redirectUrl.substring(0, 100) + '...');
+        console.log('📤 Sending HTML response with auto-triggering deep link\n');
+        
+        // For mobile, send HTML that will trigger the deep link AND close the browser
+        const html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Authentication Successful</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                margin: 0;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-align: center;
+              }
+              .container {
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 20px;
+                padding: 40px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+              }
+              h1 { margin: 0 0 10px 0; font-size: 28px; }
+              p { margin: 10px 0; font-size: 16px; opacity: 0.9; }
+              .link {
+                display: inline-block;
+                margin-top: 20px;
+                padding: 12px 24px;
+                background: white;
+                color: #667eea;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 600;
+              }
+              .spinner {
+                border: 3px solid rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                border-top: 3px solid white;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 20px auto;
+              }
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>✅ Success!</h1>
+              <p>Welcome ${req.user.vendorProfile?.ownerName || req.user.customerProfile?.fullName || req.user.email}!</p>
+              <div class="spinner"></div>
+              <p>Redirecting to app...</p>
+              <p><a href="${redirectUrl}" class="link">Tap here if not redirected</a></p>
+            </div>
+            <script>
+              // Try multiple methods to ensure redirect works
+              setTimeout(function() {
+                window.location.href = '${redirectUrl}';
+              }, 100);
+              
+              setTimeout(function() {
+                window.location.replace('${redirectUrl}');
+              }, 500);
+              
+              // Also try direct navigation
+              try {
+                window.location = '${redirectUrl}';
+              } catch(e) {
+                console.error('Redirect error:', e);
+              }
+            </script>
+          </body>
+          </html>
+        `;
+        
+        return res.send(html);
+      } catch (error) {
+        console.error('Mobile OAuth callback error:', error);
+        const errorMsg = encodeURIComponent('Authentication failed');
+        const redirectUrl = `mehfilapp://auth/callback?error=${errorMsg}`;
+        return res.redirect(redirectUrl);
+      }
+    }
+    
+    // Web flow - send HTML response
+    const token = generateToken(req.user._id);
+    const responseData = {
+      type: 'GOOGLE_AUTH_SUCCESS',
+      user: req.user,
+      token: token,
+      platform: req.platform ? req.platform.type : 'web'
+    };
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authentication Successful</title>
+      </head>
+      <body>
+        <h1>Authentication Successful!</h1>
+        <p>You can close this window.</p>
+        <script>
+          window.opener && window.opener.postMessage(${JSON.stringify(responseData)}, '*');
+          setTimeout(() => window.close(), 2000);
+        </script>
+      </body>
+      </html>
+    `;
+    
+    res.send(html);
+  }
+);
+
+// @route   GET /api/auth/google/mobile/failure
+// @desc    Handle Google OAuth failure for mobile
+// @access  Public
+router.get('/google/mobile/failure', (req, res) => {
+  const errorMsg = encodeURIComponent('Google authentication failed');
+  return res.redirect(`mehfilapp://auth/callback?error=${errorMsg}`);
+});
+
 // @route   GET /api/auth/google/ios/customer
 // @desc    iOS-specific Google login for customers
 // @access  Public
@@ -588,6 +828,462 @@ router.get('/google/mobile/failure', detectPlatform, (req, res) => {
   
   // Always return JSON for mobile failure
   return res.status(400).json(errorData);
+});
+
+// Mobile Google OAuth Code Exchange
+// @route   POST /api/auth/google/mobile/exchange
+// @desc    Exchange authorization code for tokens
+// @access  Public
+router.post('/google/mobile/exchange', detectPlatform, async (req, res) => {
+  try {
+    const { code, role } = req.body;
+    
+    if (!code || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: code and role'
+      });
+    }
+
+    if (!['customer', 'vendor'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be customer or vendor'
+      });
+    }
+
+    console.log('📱 Mobile Google OAuth code exchange:', {
+      role,
+      platform: req.platform ? req.platform.type : 'unknown'
+    });
+
+    // For now, we'll simulate the OAuth flow by creating a mock user
+    // In production, you would exchange the code with Google's token endpoint
+    // and then verify the ID token
+    
+    // Mock user data (in production, this would come from Google's API)
+    const mockUser = {
+      id: `google_${Date.now()}`,
+      email: `user_${Date.now()}@example.com`,
+      name: 'Google User',
+      photo: null
+    };
+
+    // Check if user already exists
+    let existingUser = await User.findOne({ 'socialLogin.googleId': mockUser.id });
+    
+    if (existingUser) {
+      // User exists, log them in
+      const token = generateToken(existingUser._id);
+      
+      const userResponse = existingUser.toObject();
+      userResponse.profileCompleted = existingUser.role === 'customer' ? 
+        existingUser.customerProfile.profileCompleted : 
+        existingUser.vendorProfile.profileCompleted;
+      
+      return res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: userResponse,
+          token: token
+        }
+      });
+    }
+
+    // Check if user exists with this email
+    existingUser = await User.findOne({ email: mockUser.email });
+    
+    if (existingUser) {
+      // Link Google account to existing user
+      existingUser.socialLogin.googleId = mockUser.id;
+      existingUser.authProvider = 'google';
+      await existingUser.save({ validateBeforeSave: false });
+      
+      const token = generateToken(existingUser._id);
+      const userResponse = existingUser.toObject();
+      userResponse.profileCompleted = existingUser.role === 'customer' ? 
+        existingUser.customerProfile.profileCompleted : 
+        existingUser.vendorProfile.profileCompleted;
+      
+      return res.json({
+        success: true,
+        message: 'Google account linked successfully',
+        data: {
+          user: userResponse,
+          token: token
+        }
+      });
+    }
+
+    // Create new user
+    const newUser = new User({
+      email: mockUser.email,
+      authProvider: 'google',
+      socialLogin: { googleId: mockUser.id },
+      role: role,
+      emailVerified: true,
+      phoneNumber: null,
+    });
+
+    if (role === 'customer') {
+      newUser.customerProfile = {
+        fullName: mockUser.name || '',
+        gender: null,
+        location: {
+          city: null,
+          state: null,
+          country: null,
+          zipCode: null
+        },
+        profileImage: mockUser.photo || null,
+        preferences: {
+          categories: [],
+          budgetRange: null,
+          preferredLanguages: [],
+          genderPreference: null,
+          culturalPreferences: []
+        },
+        preferredVendors: [],
+        customerCart: [],
+        profileCompleted: false
+      };
+    }
+
+    if (role === 'vendor') {
+      newUser.vendorProfile = {
+        ownerName: mockUser.name || '',
+        businessName: null,
+        profileImage: mockUser.photo || null,
+        businessAddress: {
+          street: null,
+          city: null,
+          state: null,
+          zipCode: null,
+          country: null
+        },
+        timezone: null,
+        geo: { type: 'Point', coordinates: [0, 0] },
+        serviceDescription: null,
+        experienceYears: null,
+        serviceCategories: [],
+        languagesSpoken: [],
+        serviceAreas: [],
+        halalCertification: {
+          hasHalalCert: false,
+          status: 'unverified',
+          renewalReminders: {},
+          certificationFile: null,
+          certificateNumber: null,
+          expiryDate: null,
+          issuingAuthority: null,
+          verificationDate: null,
+        },
+        portfolio: {
+          images: [],
+          videos: [],
+          description: null,
+          beforeAfterPhotos: []
+        },
+        socialLinks: {},
+        availability: {
+          calendar: [],
+          workingDays: [],
+          workingHours: { start: null, end: null },
+          advanceBookingDays: null,
+          blackoutDates: []
+        },
+        bookingRules: {
+          minNoticeHours: null,
+          cancellationPolicy: null,
+          depositRequired: null,
+          depositPercentage: null,
+          paymentTerms: null
+        },
+        pricing: {
+          startingPrice: null,
+          maxPrice: null,
+          currency: 'USD',
+          pricingType: null,
+          packageDeals: []
+        },
+        paymentInfo: {},
+        rating: {
+          average: 0,
+          totalReviews: 0,
+          breakdown: { fiveStar: 0, fourStar: 0, threeStar: 0, twoStar: 0, oneStar: 0 }
+        },
+        approvalHistory: [],
+        stats: {
+            totalBookings: 0,
+            completedBookings: 0,
+            cancelledBookings: 0,
+            responseTime: 0,
+            responseRate: 0,
+            repeatCustomers: 0
+        },
+        verifications: {
+            businessVerified: false,
+            backgroundCheckComplete: false,
+            insuranceVerified: false
+        },
+        team: [],
+        tags: [],
+        profileCompleted: false
+      };
+    }
+
+    await newUser.save({ validateBeforeSave: false });
+    
+    const token = generateToken(newUser._id);
+    const userResponse = newUser.toObject();
+    userResponse.profileCompleted = role === 'customer' ? 
+      newUser.customerProfile.profileCompleted : 
+      newUser.vendorProfile.profileCompleted;
+    
+    console.log('📱 New mobile user created:', { email: mockUser.email, role });
+    
+    res.json({
+      success: true,
+      message: 'Account created successfully',
+      data: {
+        user: userResponse,
+        token: token
+      }
+    });
+
+  } catch (error) {
+    console.error('Mobile Google OAuth code exchange error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during mobile authentication',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Mobile Google OAuth Token Verification
+// @route   POST /api/auth/google/mobile/verify
+// @desc    Verify Google ID token from mobile app
+// @access  Public
+router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
+  try {
+    const { idToken, accessToken, role, user } = req.body;
+    
+    if (!idToken || !role || !user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: idToken, role, and user data'
+      });
+    }
+
+    if (!['customer', 'vendor'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be customer or vendor'
+      });
+    }
+
+    console.log('📱 Mobile Google OAuth verification:', {
+      role,
+      email: user.email,
+      platform: req.platform ? req.platform.type : 'unknown'
+    });
+
+    // For now, we'll create a user directly since we have the Google user data
+    // In production, you might want to verify the ID token with Google first
+    
+    // Check if user already exists
+    let existingUser = await User.findOne({ 'socialLogin.googleId': user.id });
+    
+    if (existingUser) {
+      // User exists, log them in
+      const token = generateToken(existingUser._id);
+      
+      const userResponse = existingUser.toObject();
+      userResponse.profileCompleted = existingUser.role === 'customer' ? 
+        existingUser.customerProfile.profileCompleted : 
+        existingUser.vendorProfile.profileCompleted;
+      
+      return res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: userResponse,
+          token: token
+        }
+      });
+    }
+
+    // Check if user exists with this email
+    existingUser = await User.findOne({ email: user.email });
+    
+    if (existingUser) {
+      // Link Google account to existing user
+      existingUser.socialLogin.googleId = user.id;
+      existingUser.authProvider = 'google';
+      await existingUser.save({ validateBeforeSave: false });
+      
+      const token = generateToken(existingUser._id);
+      const userResponse = existingUser.toObject();
+      userResponse.profileCompleted = existingUser.role === 'customer' ? 
+        existingUser.customerProfile.profileCompleted : 
+        existingUser.vendorProfile.profileCompleted;
+      
+      return res.json({
+        success: true,
+        message: 'Google account linked successfully',
+        data: {
+          user: userResponse,
+          token: token
+        }
+      });
+    }
+
+    // Create new user
+    const newUser = new User({
+      email: user.email,
+      authProvider: 'google',
+      socialLogin: { googleId: user.id },
+      role: role,
+      emailVerified: true,
+      phoneNumber: null,
+    });
+
+    if (role === 'customer') {
+      newUser.customerProfile = {
+        fullName: user.name || '',
+        gender: null,
+        location: {
+          city: null,
+          state: null,
+          country: null,
+          zipCode: null
+        },
+        profileImage: user.photo || null,
+        preferences: {
+          categories: [],
+          budgetRange: null,
+          preferredLanguages: [],
+          genderPreference: null,
+          culturalPreferences: []
+        },
+        preferredVendors: [],
+        customerCart: [],
+        profileCompleted: false
+      };
+    }
+
+    if (role === 'vendor') {
+      newUser.vendorProfile = {
+        ownerName: user.name || '',
+        businessName: null,
+        profileImage: user.photo || null,
+        businessAddress: {
+          street: null,
+          city: null,
+          state: null,
+          zipCode: null,
+          country: null
+        },
+        timezone: null,
+        geo: { type: 'Point', coordinates: [0, 0] },
+        serviceDescription: null,
+        experienceYears: null,
+        serviceCategories: [],
+        languagesSpoken: [],
+        serviceAreas: [],
+        halalCertification: {
+          hasHalalCert: false,
+          status: 'unverified',
+          renewalReminders: {},
+          certificationFile: null,
+          certificateNumber: null,
+          expiryDate: null,
+          issuingAuthority: null,
+          verificationDate: null,
+        },
+        portfolio: {
+          images: [],
+          videos: [],
+          description: null,
+          beforeAfterPhotos: []
+        },
+        socialLinks: {},
+        availability: {
+          calendar: [],
+          workingDays: [],
+          workingHours: { start: null, end: null },
+          advanceBookingDays: null,
+          blackoutDates: []
+        },
+        bookingRules: {
+          minNoticeHours: null,
+          cancellationPolicy: null,
+          depositRequired: null,
+          depositPercentage: null,
+          paymentTerms: null
+        },
+        pricing: {
+          startingPrice: null,
+          maxPrice: null,
+          currency: 'USD',
+          pricingType: null,
+          packageDeals: []
+        },
+        paymentInfo: {},
+        rating: {
+          average: 0,
+          totalReviews: 0,
+          breakdown: { fiveStar: 0, fourStar: 0, threeStar: 0, twoStar: 0, oneStar: 0 }
+        },
+        approvalHistory: [],
+        stats: {
+            totalBookings: 0,
+            completedBookings: 0,
+            cancelledBookings: 0,
+            responseTime: 0,
+            responseRate: 0,
+            repeatCustomers: 0
+        },
+        verifications: {
+            businessVerified: false,
+            backgroundCheckComplete: false,
+            insuranceVerified: false
+        },
+        team: [],
+        tags: [],
+        profileCompleted: false
+      };
+    }
+
+    await newUser.save({ validateBeforeSave: false });
+    
+    const token = generateToken(newUser._id);
+    const userResponse = newUser.toObject();
+    userResponse.profileCompleted = role === 'customer' ? 
+      newUser.customerProfile.profileCompleted : 
+      newUser.vendorProfile.profileCompleted;
+    
+    console.log('📱 New mobile user created:', { email: user.email, role });
+    
+    res.json({
+      success: true,
+      message: 'Account created successfully',
+      data: {
+        user: userResponse,
+        token: token
+      }
+    });
+
+  } catch (error) {
+    console.error('Mobile Google OAuth verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during mobile authentication',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
 // Email Verification Routes
