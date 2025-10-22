@@ -13,6 +13,7 @@ const {
 } = require('../../controllers/auth/authController');
 const User = require('../../models/User');
 const { protect: authMiddleware } = require('../../middleware/authMiddleware');
+const detectPlatform = require('../../middleware/platformDetection');
 
 const {
   validateCustomerSignup,
@@ -94,21 +95,59 @@ router.get('/me', authMiddleware, async (req, res) => {
 // @route   GET /api/auth/google/test
 // @desc    Test Google OAuth configuration
 // @access  Public
-router.get('/google/test', (req, res) => {
+router.get('/google/test', detectPlatform, (req, res) => {
   res.json({
     success: true,
     message: 'Google OAuth routes are working',
+    platform: req.platform ? req.platform.type : 'unknown',
     config: {
-      clientId: process.env.GOOGLE_CLIENT_ID ? 'Configured' : 'Not configured',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ? 'Configured' : 'Not configured',
-      redirectUri: process.env.GOOGLE_REDIRECT_URI || 'Not configured',
+      web: {
+        clientId: process.env.GOOGLE_CLIENT_ID ? 'Configured' : 'Not configured',
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET ? 'Configured' : 'Not configured',
+        redirectUri: process.env.GOOGLE_REDIRECT_URI || 'Not configured'
+      },
+      mobile: {
+        clientId: process.env.GOOGLE_MOBILE_CLIENT_ID ? 'Configured' : 'Not configured',
+        clientSecret: process.env.GOOGLE_MOBILE_CLIENT_SECRET ? 'Configured' : 'Not configured',
+        redirectUri: process.env.GOOGLE_MOBILE_REDIRECT_URI || 'Not configured'
+      },
       frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
-      expectedRedirectUri: 'http://localhost:8000/api/auth/google/callback'
+      platformDetection: process.env.ENABLE_PLATFORM_DETECTION || 'false'
+    },
+    availableRoutes: {
+      web: [
+        'GET /api/auth/google/customer',
+        'GET /api/auth/google/vendor',
+        'GET /api/auth/google/callback'
+      ],
+      ios: [
+        'GET /api/auth/google/ios/customer',
+        'GET /api/auth/google/ios/vendor',
+        'GET /api/auth/google/ios/callback'
+      ],
+      mobile: [
+        'GET /api/auth/google/mobile/customer',
+        'GET /api/auth/google/mobile/vendor',
+        'GET /api/auth/google/mobile/callback'
+      ]
     },
     instructions: {
-      step1: 'Make sure GOOGLE_REDIRECT_URI in your .env file is: http://localhost:8000/api/auth/google/callback',
-      step2: 'In Google Cloud Console, add this exact URI to Authorized redirect URIs: http://localhost:8000/api/auth/google/callback',
-      step3: 'Restart your backend server after making changes'
+      web: {
+        step1: 'Make sure GOOGLE_REDIRECT_URI in your .env file is: http://localhost:8000/api/auth/google/callback',
+        step2: 'In Google Cloud Console, add this exact URI to Authorized redirect URIs: http://localhost:8000/api/auth/google/callback'
+      },
+      ios: {
+        step1: 'Configure GOOGLE_MOBILE_CLIENT_ID and GOOGLE_MOBILE_CLIENT_SECRET in your .env file',
+        step2: 'Set GOOGLE_MOBILE_REDIRECT_URI to: mehfilapp://auth/callback',
+        step3: 'In Google Cloud Console, create an iOS OAuth client with Bundle ID: com.moneebb.mehfilapp',
+        step4: 'Add redirect URI: mehfilapp://auth/callback'
+      },
+      mobile: {
+        step1: 'Configure GOOGLE_MOBILE_CLIENT_ID and GOOGLE_MOBILE_CLIENT_SECRET in your .env file',
+        step2: 'Set GOOGLE_MOBILE_REDIRECT_URI to: mehfilapp://auth/callback',
+        step3: 'In Google Cloud Console, create a mobile OAuth client and add the redirect URI'
+      },
+      step4: 'Restart your backend server after making changes'
     }
   });
 });
@@ -117,13 +156,16 @@ router.get('/google/test', (req, res) => {
 // @route   GET /api/auth/google/customer
 // @desc    Initiate Google login for customers
 // @access  Public
-router.get('/google/customer', (req, res, next) => {
-  
-  
-  
+router.get('/google/customer', detectPlatform, (req, res, next) => {
   // Add state parameter to the request
   req.query.state = 'customer';
-  passport.authenticate('google', {
+  
+  // Log platform detection for debugging
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🚀 Google OAuth Customer - Platform:', req.platform.type);
+  }
+  
+  passport.authenticate('google-web', {
     state: 'customer',
     session: false
   })(req, res, next);
@@ -132,13 +174,16 @@ router.get('/google/customer', (req, res, next) => {
 // @route   GET /api/auth/google/vendor
 // @desc    Initiate Google login for vendors
 // @access  Public
-router.get('/google/vendor', (req, res, next) => {
-  
-  
-  
+router.get('/google/vendor', detectPlatform, (req, res, next) => {
   // Add state parameter to the request
   req.query.state = 'vendor';
-  passport.authenticate('google', {
+  
+  // Log platform detection for debugging
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🚀 Google OAuth Vendor - Platform:', req.platform.type);
+  }
+  
+  passport.authenticate('google-web', {
     state: 'vendor',
     session: false
   })(req, res, next);
@@ -148,7 +193,8 @@ router.get('/google/vendor', (req, res, next) => {
 // @desc    Google OAuth callback URL
 // @access  Public
 router.get('/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: '/api/auth/google/failure' }),
+  detectPlatform,
+  passport.authenticate('google-web', { session: false, failureRedirect: '/api/auth/google/failure' }),
   (req, res) => {
     // On successful authentication, the user object is attached to req.user
     const token = generateToken(req.user._id);
@@ -157,10 +203,21 @@ router.get('/google/callback',
     const responseData = {
       type: 'GOOGLE_AUTH_SUCCESS',
       user: req.user,
-      token: token
+      token: token,
+      platform: req.platform ? req.platform.type : 'web'
     };
 
-    // Send the data back to the parent window (frontend)
+    // Platform-aware response handling
+    if (req.platform && req.platform.isMobile) {
+      // For mobile apps, return JSON response
+      return res.json({
+        success: true,
+        message: 'Authentication successful',
+        data: responseData
+      });
+    }
+
+    // For web apps, return HTML popup response (existing behavior)
     const htmlResponse = `
       <!DOCTYPE html>
       <html>
@@ -251,12 +308,24 @@ router.get('/google/callback',
 // @route   GET /api/auth/google/failure
 // @desc    Google OAuth failure handler
 // @access  Public
-router.get('/google/failure', (req, res) => {
+router.get('/google/failure', detectPlatform, (req, res) => {
   const errorData = {
     type: 'GOOGLE_AUTH_ERROR',
-    error: 'Authentication failed. Please try again.'
+    error: 'Authentication failed. Please try again.',
+    platform: req.platform ? req.platform.type : 'web'
   };
 
+  // Platform-aware error response handling
+  if (req.platform && req.platform.isMobile) {
+    // For mobile apps, return JSON error response
+    return res.status(400).json({
+      success: false,
+      message: 'Authentication failed',
+      error: errorData
+    });
+  }
+
+  // For web apps, return HTML error response (existing behavior)
   const htmlResponse = `
     <!DOCTYPE html>
     <html>
@@ -345,6 +414,180 @@ router.get('/google/failure', (req, res) => {
   `;
 
   res.send(htmlResponse);
+});
+
+// iOS-specific OAuth routes for better iOS app integration
+// @route   GET /api/auth/google/ios/customer
+// @desc    iOS-specific Google login for customers
+// @access  Public
+router.get('/google/ios/customer', detectPlatform, (req, res, next) => {
+  // Force iOS platform detection
+  req.platform = { type: 'ios', isMobile: true, isWeb: false };
+  
+  // Add state parameter to the request
+  req.query.state = 'customer';
+  
+  console.log('🍎 iOS Google OAuth Customer initiated');
+  
+  passport.authenticate('google-mobile', {
+    state: 'customer',
+    session: false
+  })(req, res, next);
+});
+
+// Mobile-specific OAuth routes for better mobile app integration
+// @route   GET /api/auth/google/mobile/customer
+// @desc    Mobile-specific Google login for customers
+// @access  Public
+router.get('/google/mobile/customer', detectPlatform, (req, res, next) => {
+  // Force mobile platform detection
+  req.platform = { type: 'mobile', isMobile: true, isWeb: false };
+  
+  // Add state parameter to the request
+  req.query.state = 'customer';
+  
+  console.log('📱 Mobile Google OAuth Customer initiated');
+  
+  passport.authenticate('google-mobile', {
+    state: 'customer',
+    session: false
+  })(req, res, next);
+});
+
+// @route   GET /api/auth/google/ios/vendor
+// @desc    iOS-specific Google login for vendors
+// @access  Public
+router.get('/google/ios/vendor', detectPlatform, (req, res, next) => {
+  // Force iOS platform detection
+  req.platform = { type: 'ios', isMobile: true, isWeb: false };
+  
+  // Add state parameter to the request
+  req.query.state = 'vendor';
+  
+  console.log('🍎 iOS Google OAuth Vendor initiated');
+  
+  passport.authenticate('google-mobile', {
+    state: 'vendor',
+    session: false
+  })(req, res, next);
+});
+
+// @route   GET /api/auth/google/mobile/vendor
+// @desc    Mobile-specific Google login for vendors
+// @access  Public
+router.get('/google/mobile/vendor', detectPlatform, (req, res, next) => {
+  // Force mobile platform detection
+  req.platform = { type: 'mobile', isMobile: true, isWeb: false };
+  
+  // Add state parameter to the request
+  req.query.state = 'vendor';
+  
+  console.log('📱 Mobile Google OAuth Vendor initiated');
+  
+  passport.authenticate('google-mobile', {
+    state: 'vendor',
+    session: false
+  })(req, res, next);
+});
+
+// @route   GET /api/auth/google/ios/callback
+// @desc    iOS-specific Google OAuth callback
+// @access  Public
+router.get('/google/ios/callback',
+  detectPlatform,
+  passport.authenticate('google-mobile', { session: false, failureRedirect: '/api/auth/google/ios/failure' }),
+  (req, res) => {
+    // Force iOS platform for this route
+    req.platform = { type: 'ios', isMobile: true, isWeb: false };
+    
+    const token = generateToken(req.user._id);
+    
+    const responseData = {
+      success: true,
+      message: 'iOS authentication successful',
+      data: {
+        type: 'GOOGLE_AUTH_SUCCESS',
+        user: req.user,
+        token: token,
+        platform: 'ios'
+      }
+    };
+    
+    console.log('🍎 iOS OAuth callback successful for user:', req.user.email);
+    
+    // Always return JSON for iOS callback
+    return res.json(responseData);
+  }
+);
+
+// @route   GET /api/auth/google/mobile/callback
+// @desc    Mobile-specific Google OAuth callback
+// @access  Public
+router.get('/google/mobile/callback',
+  detectPlatform,
+  passport.authenticate('google-mobile', { session: false, failureRedirect: '/api/auth/google/mobile/failure' }),
+  (req, res) => {
+    // Force mobile platform for this route
+    req.platform = { type: 'mobile', isMobile: true, isWeb: false };
+    
+    const token = generateToken(req.user._id);
+    
+    const responseData = {
+      success: true,
+      message: 'Mobile authentication successful',
+      data: {
+        type: 'GOOGLE_AUTH_SUCCESS',
+        user: req.user,
+        token: token,
+        platform: 'mobile'
+      }
+    };
+    
+    console.log('📱 Mobile OAuth callback successful for user:', req.user.email);
+    
+    // Always return JSON for mobile callback
+    return res.json(responseData);
+  }
+);
+
+// @route   GET /api/auth/google/ios/failure
+// @desc    iOS-specific Google OAuth failure handler
+// @access  Public
+router.get('/google/ios/failure', detectPlatform, (req, res) => {
+  const errorData = {
+    success: false,
+    message: 'iOS authentication failed',
+    error: {
+      type: 'GOOGLE_AUTH_ERROR',
+      error: 'Authentication failed. Please try again.',
+      platform: 'ios'
+    }
+  };
+  
+  console.log('🍎 iOS OAuth failure');
+  
+  // Always return JSON for iOS failure
+  return res.status(400).json(errorData);
+});
+
+// @route   GET /api/auth/google/mobile/failure
+// @desc    Mobile-specific Google OAuth failure handler
+// @access  Public
+router.get('/google/mobile/failure', detectPlatform, (req, res) => {
+  const errorData = {
+    success: false,
+    message: 'Mobile authentication failed',
+    error: {
+      type: 'GOOGLE_AUTH_ERROR',
+      error: 'Authentication failed. Please try again.',
+      platform: 'mobile'
+    }
+  };
+  
+  console.log('📱 Mobile OAuth failure');
+  
+  // Always return JSON for mobile failure
+  return res.status(400).json(errorData);
 });
 
 // Email Verification Routes
