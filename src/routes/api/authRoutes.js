@@ -14,6 +14,12 @@ const {
 const User = require('../../models/User');
 const { protect: authMiddleware } = require('../../middleware/authMiddleware');
 const detectPlatform = require('../../middleware/platformDetection');
+const { 
+  verifyGoogleIdToken, 
+  verifyGoogleIdTokenMultiPlatform,
+  getClientIdForPlatform,
+  getAllClientIds 
+} = require('../../utils/googleAuth');
 
 const {
   validateCustomerSignup,
@@ -1062,18 +1068,18 @@ router.post('/google/mobile/exchange', detectPlatform, async (req, res) => {
   }
 });
 
-// Mobile Google OAuth Token Verification
+// Mobile Google OAuth Token Verification (SECURE VERSION - 2025)
 // @route   POST /api/auth/google/mobile/verify
-// @desc    Verify Google ID token from mobile app
+// @desc    Verify Google ID token from mobile app (iOS/Android)
 // @access  Public
 router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
   try {
-    const { idToken, accessToken, role, user } = req.body;
+    const { idToken, role, platform } = req.body;
     
-    if (!idToken || !role || !user) {
+    if (!idToken || !role) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: idToken, role, and user data'
+        message: 'Missing required fields: idToken and role'
       });
     }
 
@@ -1084,23 +1090,44 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
       });
     }
 
-    console.log('📱 Mobile Google OAuth verification:', {
-      role,
-      email: user.email,
-      platform: req.platform ? req.platform.type : 'unknown'
+    // SECURITY: Verify the ID token with Google's servers
+    // Support multiple client IDs (iOS, Android, Web) for flexibility
+    const clientIds = getAllClientIds();
+    
+    if (clientIds.length === 0) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error: Google OAuth not properly configured'
+      });
+    }
+
+    const verificationResult = await verifyGoogleIdTokenMultiPlatform(idToken, clientIds);
+    
+    if (!verificationResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid Google ID token',
+        error: verificationResult.error,
+        details: verificationResult.details
+      });
+    }
+
+    const googleUser = verificationResult.data;
+    console.log('✅ Google Auth Success:', {
+      email: googleUser.email,
+      role: role,
+      platform: platform || req.platform?.type || 'unknown',
     });
 
-    // For now, we'll create a user directly since we have the Google user data
-    // In production, you might want to verify the ID token with Google first
-    
-    // Check if user already exists
-    let existingUser = await User.findOne({ 'socialLogin.googleId': user.id });
+    // Check if user already exists by Google ID
+    let existingUser = await User.findOne({ 'socialLogin.googleId': googleUser.googleId });
     
     if (existingUser) {
       // User exists, log them in
       const token = generateToken(existingUser._id);
       
       const userResponse = existingUser.toObject();
+      delete userResponse.password;
       userResponse.profileCompleted = existingUser.role === 'customer' ? 
         existingUser.customerProfile.profileCompleted : 
         existingUser.vendorProfile.profileCompleted;
@@ -1116,16 +1143,19 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
     }
 
     // Check if user exists with this email
-    existingUser = await User.findOne({ email: user.email });
+    existingUser = await User.findOne({ email: googleUser.email });
     
     if (existingUser) {
+      console.log('👤 Existing user found by email - linking Google account');
       // Link Google account to existing user
-      existingUser.socialLogin.googleId = user.id;
+      existingUser.socialLogin.googleId = googleUser.googleId;
       existingUser.authProvider = 'google';
+      existingUser.emailVerified = googleUser.emailVerified;
       await existingUser.save({ validateBeforeSave: false });
       
       const token = generateToken(existingUser._id);
       const userResponse = existingUser.toObject();
+      delete userResponse.password;
       userResponse.profileCompleted = existingUser.role === 'customer' ? 
         existingUser.customerProfile.profileCompleted : 
         existingUser.vendorProfile.profileCompleted;
@@ -1140,19 +1170,19 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
       });
     }
 
-    // Create new user
+    // Create new user with VERIFIED Google data
     const newUser = new User({
-      email: user.email,
+      email: googleUser.email,
       authProvider: 'google',
-      socialLogin: { googleId: user.id },
+      socialLogin: { googleId: googleUser.googleId },
       role: role,
-      emailVerified: true,
+      emailVerified: googleUser.emailVerified,
       phoneNumber: null,
     });
 
     if (role === 'customer') {
       newUser.customerProfile = {
-        fullName: user.name || '',
+        fullName: googleUser.name || '',
         gender: null,
         location: {
           city: null,
@@ -1160,7 +1190,7 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
           country: null,
           zipCode: null
         },
-        profileImage: user.photo || null,
+        profileImage: googleUser.picture || null,
         preferences: {
           categories: [],
           budgetRange: null,
@@ -1176,9 +1206,9 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
 
     if (role === 'vendor') {
       newUser.vendorProfile = {
-        ownerName: user.name || '',
+        ownerName: googleUser.name || '',
         businessName: null,
-        profileImage: user.photo || null,
+        profileImage: googleUser.picture || null,
         businessAddress: {
           street: null,
           city: null,
@@ -1261,11 +1291,10 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
     
     const token = generateToken(newUser._id);
     const userResponse = newUser.toObject();
+    delete userResponse.password;
     userResponse.profileCompleted = role === 'customer' ? 
       newUser.customerProfile.profileCompleted : 
       newUser.vendorProfile.profileCompleted;
-    
-    console.log('📱 New mobile user created:', { email: user.email, role });
     
     res.json({
       success: true,
@@ -1277,7 +1306,7 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Mobile Google OAuth verification error:', error);
+    console.error('❌ Mobile Google OAuth verification error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error during mobile authentication',

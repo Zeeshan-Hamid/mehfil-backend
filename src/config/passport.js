@@ -245,16 +245,18 @@ module.exports = function(passport) {
     )
   );
 
-  // Mobile OAuth Strategy
-  passport.use('google-mobile',
-    new GoogleStrategy(
-      {
-        clientID: process.env.GOOGLE_MOBILE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_MOBILE_CLIENT_SECRET || '',
-        callbackURL: process.env.GOOGLE_MOBILE_REDIRECT_URI,
-        passReqToCallback: true,
-        scope: ['openid', 'email', 'profile']
-      },
+  // Mobile OAuth Strategy (DEPRECATED - Use /api/auth/google/mobile/verify instead)
+  // Only register if credentials are provided (for backward compatibility)
+  if (process.env.GOOGLE_MOBILE_CLIENT_ID && process.env.GOOGLE_MOBILE_REDIRECT_URI) {
+    passport.use('google-mobile',
+      new GoogleStrategy(
+        {
+          clientID: process.env.GOOGLE_MOBILE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_MOBILE_CLIENT_SECRET || '',
+          callbackURL: process.env.GOOGLE_MOBILE_REDIRECT_URI,
+          passReqToCallback: true,
+          scope: ['openid', 'email', 'profile']
+        },
       async (req, accessToken, refreshToken, profile, done) => {
         try {
           // Log platform information for debugging
@@ -432,4 +434,8 @@ module.exports = function(passport) {
       }
     )
   );
+  } else {
+    console.log('⚠️  Google Mobile OAuth Strategy not registered (missing credentials)');
+    console.log('   For mobile apps, use the /api/auth/google/mobile/verify endpoint with ID token verification');
+  }
 }; 
