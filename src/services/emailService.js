@@ -229,6 +229,70 @@ class EmailService {
     }
   }
 
+  static async sendVerificationCodeEmail(email, verificationCode, userName) {
+    const title = 'Verify Your Email Address';
+    const content = `
+      <p>Hi ${userName || 'there'},</p>
+      <p>Thank you for signing up with Mehfil! To complete your registration, please use the verification code below:</p>
+      <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
+        <p style="color: #687076; font-size: 14px; margin: 0 0 8px 0;">Your Verification Code</p>
+        <h1 style="color: #11181C; font-size: 36px; font-weight: 700; letter-spacing: 8px; margin: 0;">${verificationCode}</h1>
+      </div>
+      <p>This code will expire in <strong>10 minutes</strong>.</p>
+      <p>If you didn't create an account with Mehfil, please ignore this email.</p>
+    `;
+
+    const html = emailTemplate(title, content);
+
+    const message = {
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Your Verification Code - Mehfil',
+      html,
+    };
+
+    try {
+      await transporter.sendMail(message);
+      return true;
+    } catch (error) {
+      console.error('Failed to send verification code email:', error);
+      throw new Error('Failed to send verification code email');
+    }
+  }
+
+  static async sendPasswordResetCodeEmail(email, resetCode, userName) {
+    const title = 'Reset Your Password';
+    const content = `
+      <p>Hi ${userName || 'there'},</p>
+      <p>We received a request to reset your password for your Mehfil account. Please use the verification code below to proceed:</p>
+      <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; text-align: center; margin: 24px 0;">
+        <p style="color: #687076; font-size: 14px; margin: 0 0 8px 0;">Your Password Reset Code</p>
+        <h1 style="color: #11181C; font-size: 36px; font-weight: 700; letter-spacing: 8px; margin: 0;">${resetCode}</h1>
+      </div>
+      <p>This code will expire in <strong>10 minutes</strong>.</p>
+      <p style="margin-top: 24px; padding: 16px; background-color: #fff3cd; border-radius: 4px; border-left: 4px solid #ffc107;">
+        <strong>Security Note:</strong> If you didn't request this password reset, please ignore this email. Your password will remain unchanged.
+      </p>
+    `;
+
+    const html = emailTemplate(title, content);
+
+    const message = {
+      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Password Reset Code - Mehfil',
+      html,
+    };
+
+    try {
+      await transporter.sendMail(message);
+      return true;
+    } catch (error) {
+      console.error('Failed to send password reset code email:', error);
+      throw new Error('Failed to send password reset code email');
+    }
+  }
+
 
   static async sendVendorVerificationRequestEmail({ 
     vendorEmail, 

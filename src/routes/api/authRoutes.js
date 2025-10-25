@@ -3,10 +3,17 @@ const router = express.Router();
 const {
   signupCustomer,
   signupVendor,
+  signupMobileCustomer,
+  signupMobileVendor,
+  verifyEmailWithCode,
+  resendVerificationCode,
   login,
   forgotPassword,
   verifyResetToken,
   resetPassword,
+  forgotPasswordMobile,
+  verifyResetCode,
+  resetPasswordMobile,
   verifyEmail,
   resendVerificationEmail,
   changePassword
@@ -27,6 +34,8 @@ const {
   validateLogin,
   validateForgotPassword,
   validateResetPassword,
+  validateVerifyResetCode,
+  validateResetPasswordMobile,
   validateChangePassword
 } = require('../../validators/authValidators');
 const passport = require('passport');
@@ -63,6 +72,26 @@ router.post('/signup/customer', validateCustomerSignup, signupCustomer);
 // @desc    Register a new vendor
 // @access  Public
 router.post('/signup/vendor', validateVendorSignup, signupVendor);
+
+// @route   POST /api/auth/signup/mobile/customer
+// @desc    Register a new customer (Mobile with verification code)
+// @access  Public
+router.post('/signup/mobile/customer', validateCustomerSignup, signupMobileCustomer);
+
+// @route   POST /api/auth/signup/mobile/vendor
+// @desc    Register a new vendor (Mobile with verification code)
+// @access  Public
+router.post('/signup/mobile/vendor', validateVendorSignup, signupMobileVendor);
+
+// @route   POST /api/auth/verify-email
+// @desc    Verify email with 6-digit code
+// @access  Public
+router.post('/verify-email-code', verifyEmailWithCode);
+
+// @route   POST /api/auth/resend-verification-code
+// @desc    Resend verification code
+// @access  Public
+router.post('/resend-verification-code', emailVerificationLimiter, resendVerificationCode);
 
 // @route   POST /api/auth/login
 // @desc    Login user (customer/vendor/admin)
@@ -1325,15 +1354,38 @@ router.post('/resend-verification', emailVerificationLimiter, resendVerification
 // @access  Public
 router.post('/forgot-password', passwordResetLimiter, validateForgotPassword, forgotPassword);
 
+// ==================== MOBILE PASSWORD RESET ROUTES (MUST BE BEFORE PARAMETERIZED ROUTES) ====================
+
+// @route   POST /api/auth/forgot-password/mobile
+// @desc    Send password reset code to email (Mobile)
+// @access  Public
+router.post('/forgot-password/mobile', passwordResetLimiter, validateForgotPassword, forgotPasswordMobile);
+
+// @route   POST /api/auth/verify-reset-code
+// @desc    Verify password reset code (Mobile)
+// @access  Public
+router.post('/verify-reset-code', validateVerifyResetCode, verifyResetCode);
+
+// @route   POST /api/auth/reset-password/mobile
+// @desc    Reset password with verified code (Mobile)
+// @access  Public
+router.post('/reset-password/mobile', validateResetPasswordMobile, resetPasswordMobile);
+
+// ==================== END MOBILE PASSWORD RESET ROUTES ====================
+
+// ==================== WEB PASSWORD RESET ROUTES ====================
+
 // @route   GET /api/auth/reset-password/:token
-// @desc    Verify password reset token
+// @desc    Verify password reset token (Web)
 // @access  Public
 router.get('/reset-password/:token', verifyResetToken);
 
 // @route   POST /api/auth/reset-password/:token
-// @desc    Reset password with token
+// @desc    Reset password with token (Web)
 // @access  Public
 router.post('/reset-password/:token', validateResetPassword, resetPassword);
+
+// ==================== END WEB PASSWORD RESET ROUTES ====================
 
 // @route   PUT /api/auth/change-password
 // @desc    Change password for authenticated user
