@@ -379,25 +379,15 @@ router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const user = req.user;
     const updateData = req.body;
-    
-    console.log('Profile update request:', {
-      userId: user._id,
-      role: user.role,
-      updateData: updateData
-    });
 
     // Update vendor profile if user is a vendor
     if (user.role === 'vendor' && updateData.businessName) {
-      
-      
       user.vendorProfile = {
         ...user.vendorProfile,
         businessName: updateData.businessName,
         ownerName: updateData.ownerName,
         businessAddress: updateData.businessAddress
       };
-      
-      
     }
 
     // Update phone number if provided
@@ -405,18 +395,8 @@ router.put('/profile', authMiddleware, async (req, res) => {
       user.phoneNumber = updateData.phoneNumber;
     }
 
-    console.log('Before save - User profile:', {
-      profileCompleted: user.vendorProfile?.profileCompleted,
-      vendorProfile: user.vendorProfile
-    });
-
     // Save the user (this will trigger the pre-save middleware to check profile completion)
     await user.save();
-    
-    console.log('After save - Profile updated successfully:', {
-      profileCompleted: user.vendorProfile?.profileCompleted,
-      vendorProfile: user.vendorProfile
-    });
 
     res.json({
       success: true,

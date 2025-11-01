@@ -118,13 +118,6 @@ exports.getEventReviews = catchAsync(async (req, res, next) => {
 exports.deleteReview = catchAsync(async (req, res, next) => {
   const { reviewId } = req.params;
   const userId = req.user.id;
-  console.log('Delete review debug:', {
-    reviewId,
-    userId,
-    userId_id: req.user._id.toString(),
-    userRole: req.user.role,
-    userEmail: req.user.email
-  });
 
   const review = await Review.findById(reviewId);
 
@@ -138,23 +131,9 @@ exports.deleteReview = catchAsync(async (req, res, next) => {
   // Handle both populated and unpopulated customer field
   const reviewCustomerId = review.customer._id ? review.customer._id.toString() : review.customer.toString();
   
-  console.log('Review found:', {
-    reviewCustomerId,
-    reviewCustomerIdType: typeof reviewCustomerId,
-    userIdType: typeof userId,
-    userIdValue: userId,
-    isEqual: reviewCustomerId === userId
-  });
-
   // Convert both IDs to strings for comparison
   const isReviewOwner = reviewCustomerId === userId.toString();
   const isAdmin = req.user.role === 'admin';
-
-  console.log('Permission check:', {
-    isReviewOwner,
-    isAdmin,
-    willAllow: isReviewOwner || isAdmin
-  });
 
   if (!isReviewOwner && !isAdmin) {
     return res.status(403).json({

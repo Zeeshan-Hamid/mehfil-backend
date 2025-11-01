@@ -40,7 +40,6 @@ exports.createEvent = async (req, res, next) => {
 
     // 4. Parse stringified JSON fields from form-data
     const eventData = { ...req.body };
-    console.log('Backend - Raw req.body.offerings:', req.body.offerings);
     if (eventData.packages) eventData.packages = JSON.parse(eventData.packages);
     if (eventData.location) eventData.location = JSON.parse(eventData.location);
     if (eventData.services && eventData.services !== '[]') {
@@ -51,7 +50,6 @@ exports.createEvent = async (req, res, next) => {
     if (eventData.offerings && eventData.offerings !== '[]' && eventData.offerings !== '') {
       try {
         eventData.offerings = JSON.parse(eventData.offerings);
-        console.log('Backend - Successfully parsed offerings:', eventData.offerings);
       } catch (parseError) {
         console.error('Backend - Error parsing offerings:', parseError);
         eventData.offerings = [];
@@ -59,9 +57,6 @@ exports.createEvent = async (req, res, next) => {
     } else {
       eventData.offerings = []; // Default to empty array if not provided
     }
-    console.log('Backend - Parsed eventData.offerings:', eventData.offerings);
-    console.log('Backend - eventData.offerings type:', typeof eventData.offerings);
-    console.log('Backend - eventData.offerings length:', eventData.offerings?.length);
     if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
     if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
     

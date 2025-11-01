@@ -30,6 +30,13 @@ const passport = require('passport');
 const http = require('http');
 const socketIo = require('socket.io');
 
+// Import logging
+const { getLogger } = require('./src/config/logging');
+const requestLoggingMiddleware = require('./src/middleware/requestLogging');
+const performanceLoggingMiddleware = require('./src/middleware/performanceLogging');
+
+const logger = getLogger(__filename);
+
 // Import utilities
 const connectDB = require('./src/config/database');
 
@@ -89,6 +96,12 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), han
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Request logging middleware (must be after body parsers, before other middleware)
+app.use(requestLoggingMiddleware);
+
+// Performance logging middleware
+app.use(performanceLoggingMiddleware({ slowRequestThresholdMs: 1000 }));
+
 // Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -123,6 +136,26 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((error, req, res, next) => {
+  const { getLogger } = require('./src/config/logging');
+  const errorLogger = getLogger(__filename);
+
+  errorLogger.error(
+    {
+      event: 'unhandled_error',
+      error: {
+        type: error?.constructor?.name || 'Error',
+        message: error?.message || 'Internal server error',
+        stack: error?.stack,
+      },
+      http: {
+        method: req.method,
+        path: req.path,
+        url: req.originalUrl || req.url,
+      },
+    },
+    `Unhandled error: ${error?.message || 'Unknown error'}`
+  );
+
   res.status(error.status || 500).json({
     success: false,
     message: error.message || 'Internal server error',
@@ -133,8 +166,23 @@ app.use((error, req, res, next) => {
 
 // Start server
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(
+    {
+      event: 'server_started',
+      server: {
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development',
+      },
+    },
+    `Server running on port ${PORT}`
+  );
+  logger.info(
+    {
+      event: 'server_environment',
+      environment: process.env.NODE_ENV || 'development',
+    },
+    `Environment: ${process.env.NODE_ENV || 'development'}`
+  );
 });
 
 module.exports = app;

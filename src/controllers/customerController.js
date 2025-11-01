@@ -84,13 +84,38 @@ exports.updateCustomerProfile = catchAsync(async (req, res, next) => {
     }
   }
 
+  // Handle nested customerProfile structure (from FormData JSON strings or nested objects)
+  // Extract fields from customerProfile if present
+  if (updateData.customerProfile) {
+    let customerProfileData = updateData.customerProfile;
+    // Parse if it's a JSON string (from FormData)
+    if (typeof customerProfileData === 'string') {
+      try {
+        customerProfileData = JSON.parse(customerProfileData);
+      } catch (error) {
+        console.error('Error parsing customerProfile data:', error);
+      }
+    }
+    // Merge customerProfile fields into updateData for unified processing
+    if (customerProfileData.fullName) updateData.fullName = customerProfileData.fullName;
+    if (customerProfileData.gender) updateData.gender = customerProfileData.gender;
+    if (customerProfileData.location) updateData.location = customerProfileData.location;
+    if (customerProfileData.preferences) updateData.preferences = customerProfileData.preferences;
+    if (customerProfileData.profileImage) updateData.profileImage = customerProfileData.profileImage;
+  }
+
   // Update customer profile fields
   if (updateData.fullName) {
     customer.customerProfile.fullName = updateData.fullName;
   }
 
   if (updateData.gender) {
-    customer.customerProfile.gender = updateData.gender;
+    // Normalize gender value (handle "prefer-not-to-say" -> "prefer_not_to_say")
+    let genderValue = updateData.gender;
+    if (genderValue === 'prefer-not-to-say' || genderValue === 'prefer_not_to_say') {
+      genderValue = 'prefer_not_to_say';
+    }
+    customer.customerProfile.gender = genderValue;
   }
 
   if (updateData.location) {
