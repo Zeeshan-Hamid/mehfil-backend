@@ -7,23 +7,50 @@ let resend = null;
 // Get API key from environment
 const apiKey = process.env.RESEND_API_KEY;
 
-// Debug: Log email configuration
-console.log('📧 Email Configuration (Resend):');
-console.log('  Service: Resend');
-console.log('  From Email:', process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app');
-console.log('  Admin Email:', process.env.ADMIN_NOTIFICATION_EMAIL);
+const { getLogger } = require('./logging');
+
+const logger = getLogger(__filename);
 
 // Verify API key is present before initializing Resend
 if (!apiKey) {
-  console.error('❌ RESEND_API_KEY is not set in environment variables');
-  console.error('⚠️  Email sending will fail until RESEND_API_KEY is configured');
+  logger.error(
+    {
+      event: 'email_config_error',
+      error: {
+        type: 'ConfigurationError',
+        message: 'RESEND_API_KEY is not set in environment variables',
+      },
+    },
+    'RESEND_API_KEY is not set in environment variables'
+  );
+  logger.warn(
+    {
+      event: 'email_config_warning',
+      message: 'Email sending will fail until RESEND_API_KEY is configured',
+    },
+    'Email sending will fail until RESEND_API_KEY is configured'
+  );
 } else {
   try {
     resend = new Resend(apiKey);
-    console.log('  API Key: ✅ Configured');
-    console.log('✅ Resend email service is ready to send messages');
+    logger.info(
+      {
+        event: 'email_config_ready',
+      },
+      'Resend email service initialized successfully'
+    );
   } catch (error) {
-    console.error('❌ Failed to initialize Resend:', error.message);
+    logger.error(
+      {
+        event: 'email_config_error',
+        error: {
+          type: error?.constructor?.name || 'Error',
+          message: error?.message || 'Unknown error',
+          stack: error?.stack,
+        },
+      },
+      'Failed to initialize Resend'
+    );
     resend = null;
   }
 }

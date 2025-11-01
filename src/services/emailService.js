@@ -1,5 +1,8 @@
 const resend = require('../config/email');
 const emailTemplate = require('./emailTemplate');
+const { getLogger } = require('../config/logging');
+
+const logger = getLogger(__filename);
 
 class EmailService {
   static formatCurrency(amount, currency = 'usd') {
@@ -112,22 +115,38 @@ class EmailService {
       
       // Check for errors in response (Resend returns errors in response object)
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: toEmail,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'booking_confirmation',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: toEmail,
+          },
+          'Resend API error while sending booking confirmation email'
+        );
         // Do not throw to avoid failing webhook flow
         return false;
       }
       
-      console.log('📧 Booking confirmation email sent:', {
-        to: toEmail,
-        messageId: info?.data?.id
-      });
       return true;
     } catch (error) {
-      console.error('Error sending booking confirmation email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'booking_confirmation',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: toEmail,
+        },
+        'Error sending booking confirmation email'
+      );
       // Do not throw to avoid failing webhook flow
       return false;
     }
@@ -158,21 +177,37 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: email,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'password_reset',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending password reset email'
+        );
         throw new Error(`Failed to send password reset email: ${info.error.message}`);
       }
       
-      console.log('📧 Password reset email sent:', {
-        to: email,
-        messageId: info?.data?.id
-      });
       return info;
     } catch (error) {
-      console.error('Error sending password reset email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'password_reset',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending password reset email'
+      );
       throw new Error('Failed to send password reset email');
     }
   }
@@ -199,17 +234,37 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: email,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'password_reset_confirmation',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending password reset confirmation email'
+        );
         throw new Error(`Failed to send password reset confirmation: ${info.error.message}`);
       }
       
       return true;
     } catch (error) {
-      console.error('Error sending password reset confirmation:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'password_reset_confirmation',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending password reset confirmation email'
+      );
       throw new Error('Failed to send password reset confirmation');
     }
   }
@@ -238,21 +293,37 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: email,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'verification',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending verification email'
+        );
         throw new Error(`Failed to send verification email: ${info.error.message}`);
       }
       
-      console.log('📧 Verification email sent:', {
-        to: email,
-        messageId: info?.data?.id
-      });
       return info;
     } catch (error) {
-      console.error('Error sending verification email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'verification',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending verification email'
+      );
       throw new Error('Failed to send verification email');
     }
   }
@@ -278,17 +349,37 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: email,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'verification_success',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending verification success email'
+        );
         throw new Error(`Failed to send verification success email: ${info.error.message}`);
       }
       
       return true;
     } catch (error) {
-      console.error('Error sending verification success email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'verification_success',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending verification success email'
+      );
       throw new Error('Failed to send verification success email');
     }
   }
@@ -388,17 +479,39 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: adminEmail,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'vendor_verification_request',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: adminEmail,
+            vendorId,
+          },
+          'Resend API error while sending vendor verification request email'
+        );
         return false;
       }
       
       return true;
     } catch (error) {
-      console.error('Error sending vendor verification request email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'vendor_verification_request',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: adminEmail,
+          vendorId,
+        },
+        'Error sending vendor verification request email'
+      );
       // Do not throw to avoid failing profile completion flow
       return false;
     }
@@ -457,17 +570,37 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: vendorEmail,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'vendor_verification_approval',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: vendorEmail,
+          },
+          'Resend API error while sending vendor verification approval email'
+        );
         return false;
       }
       
       return true;
     } catch (error) {
-      console.error('Error sending vendor verification approval email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'vendor_verification_approval',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: vendorEmail,
+        },
+        'Error sending vendor verification approval email'
+      );
       return false;
     }
   }
@@ -529,17 +662,37 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: vendorEmail,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'vendor_verification_rejection',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: vendorEmail,
+          },
+          'Resend API error while sending vendor verification rejection email'
+        );
         return false;
       }
       
       return true;
     } catch (error) {
-      console.error('Error sending vendor verification rejection email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'vendor_verification_rejection',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: vendorEmail,
+        },
+        'Error sending vendor verification rejection email'
+      );
       return false;
     }
   }
@@ -640,17 +793,37 @@ class EmailService {
       
       // Check for errors in response
       if (info?.error) {
-        console.error('❌ Resend API error:', {
-          to: vendorEmail,
-          statusCode: info.error.statusCode,
-          message: info.error.message
-        });
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'cancellation_request',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: vendorEmail,
+          },
+          'Resend API error while sending cancellation request email'
+        );
         return false;
       }
       
       return true;
     } catch (error) {
-      console.error('Error sending cancellation request email:', error);
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'cancellation_request',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: vendorEmail,
+        },
+        'Error sending cancellation request email'
+      );
       // Do not throw to avoid failing message flow
       return false;
     }

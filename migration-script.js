@@ -14,7 +14,6 @@ async function migrateServicesToOfferings() {
   try {
     // Connect to your database
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mehfil');
-    console.log('Connected to database');
 
     // Find all events that have services but no offerings
     const eventsToMigrate = await Event.find({
@@ -24,8 +23,6 @@ async function migrateServicesToOfferings() {
         { offerings: { $size: 0 } }
       ]
     });
-
-    console.log(`Found ${eventsToMigrate.length} events to migrate`);
 
     let migratedCount = 0;
     let skippedCount = 0;
@@ -37,26 +34,18 @@ async function migrateServicesToOfferings() {
           event.offerings = [...event.services];
           await event.save();
           migratedCount++;
-          console.log(`Migrated event: ${event.name} (ID: ${event._id})`);
         } else {
           skippedCount++;
-          console.log(`Skipped event: ${event.name} (already has offerings)`);
         }
       } catch (error) {
         console.error(`Error migrating event ${event._id}:`, error.message);
       }
     }
 
-    console.log(`\nMigration completed:`);
-    console.log(`- Migrated: ${migratedCount} events`);
-    console.log(`- Skipped: ${skippedCount} events`);
-    console.log(`- Total processed: ${eventsToMigrate.length} events`);
-
   } catch (error) {
     console.error('Migration failed:', error);
   } finally {
     await mongoose.disconnect();
-    console.log('Disconnected from database');
   }
 }
 
