@@ -87,7 +87,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['pending', 'verified', 'rejected'],
       default: function() {
-        return this.role === 'vendor' ? 'pending' : undefined;
+        return this.role === 'vendor' ? 'verified' : undefined;
       }
     },
 
