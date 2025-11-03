@@ -219,13 +219,42 @@ async function processChatQueryStream(sessionId, userMessage, responseStream) {
 
     // Generate streaming response with full menu context
     const openaiClient = getOpenAIClient();
-    const stream = await openaiClient.chat.completions.create({
-      model: 'gpt-4o',
-      messages: messages,
-      max_tokens: 800,
-      temperature: 0.7,
-      stream: true,
-    });
+    
+    let stream;
+    try {
+      stream = await openaiClient.chat.completions.create({
+        model: 'gpt-4o',
+        messages: messages,
+        max_tokens: 800,
+        temperature: 0.7,
+        stream: true,
+      });
+    } catch (openaiError) {
+      logger.error(
+        {
+          event: 'openai_api_error',
+          sessionId,
+          error: {
+            type: openaiError?.constructor?.name || 'Error',
+            message: openaiError?.message || 'Unknown error',
+            status: openaiError?.status,
+            code: openaiError?.code,
+          },
+        },
+        'OpenAI API error during stream creation'
+      );
+      
+      const errorMsg = "I'm sorry, there was an issue connecting to the AI service. Please check your OpenAI API key configuration.";
+      if (!responseStream.destroyed && responseStream.writable) {
+        try {
+          responseStream.write(`data: ${JSON.stringify({ content: errorMsg, done: true, error: true })}\n\n`);
+          responseStream.end();
+        } catch (writeError) {
+          logger.debug({ event: 'error_stream_write_failed', error: writeError.message }, 'Failed to write error to stream');
+        }
+      }
+      return errorMsg;
+    }
 
     let fullResponse = '';
 
@@ -344,12 +373,32 @@ async function processChatQuery(sessionId, userMessage) {
 
     // Generate response with full menu context
     const openaiClient = getOpenAIClient();
-    const completion = await openaiClient.chat.completions.create({
-      model: 'gpt-4o',
-      messages: messages,
-      max_tokens: 800,
-      temperature: 0.7,
-    });
+    
+    let completion;
+    try {
+      completion = await openaiClient.chat.completions.create({
+        model: 'gpt-4o',
+        messages: messages,
+        max_tokens: 800,
+        temperature: 0.7,
+      });
+    } catch (openaiError) {
+      logger.error(
+        {
+          event: 'openai_api_error_non_stream',
+          sessionId,
+          error: {
+            type: openaiError?.constructor?.name || 'Error',
+            message: openaiError?.message || 'Unknown error',
+            status: openaiError?.status,
+            code: openaiError?.code,
+          },
+        },
+        'OpenAI API error during chat completion'
+      );
+      
+      return "I'm sorry, there was an issue connecting to the AI service. Please check your OpenAI API key configuration or try again later.";
+    }
 
     const response = completion.choices[0]?.message?.content || 
       "I'm sorry, I couldn't generate a response. Please try again.";
@@ -433,21 +482,45 @@ Generate exactly 4 questions that:
 
 Return ONLY a JSON array of exactly 4 strings (question strings), no additional text. Format: ["question1", "question2", "question3", "question4"]`;
 
-    const completion = await openaiClient.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
+    let completion;
+    try {
+      completion = await openaiClient.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a helpful assistant that generates engaging customer questions based on restaurant menus. Always return valid JSON arrays.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 200,
+        temperature: 0.8,
+      });
+    } catch (openaiError) {
+      logger.error(
         {
-          role: 'system',
-          content: 'You are a helpful assistant that generates engaging customer questions based on restaurant menus. Always return valid JSON arrays.'
+          event: 'openai_api_error_questions',
+          error: {
+            type: openaiError?.constructor?.name || 'Error',
+            message: openaiError?.message || 'Unknown error',
+            status: openaiError?.status,
+            code: openaiError?.code,
+          },
         },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      max_tokens: 200,
-      temperature: 0.8,
-    });
+        'OpenAI API error during question generation'
+      );
+      
+      // Return fallback questions on OpenAI error
+      return [
+        "What spicy options do you have?",
+        "Show me vegetarian main courses",
+        "What desserts go well with spicy food?",
+        "Recommend some main courses with drinks"
+      ];
+    }
 
     const response = completion.choices[0]?.message?.content || '';
     
