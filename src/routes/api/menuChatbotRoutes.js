@@ -18,11 +18,11 @@ router.post('/session', menuChatbotController.createSession);
 router.post('/upload', uploadInMemory.single('menu'), menuChatbotController.uploadMenu);
 
 /**
- * @route   POST /api/menu-chatbot/chat
+ * @route   POST /api/menu-chatbot/message
  * @desc    Send chat message
  * @access  Public
  */
-router.post('/chat', menuChatbotController.chat);
+router.post('/message', menuChatbotController.chat);
 
 /**
  * @route   GET /api/menu-chatbot/session/:sessionId/status
