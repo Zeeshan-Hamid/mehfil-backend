@@ -93,8 +93,10 @@ function requestLoggingMiddleware(req, res, next) {
         `Request completed: ${req.method} ${req.path} - ${res.statusCode}`
       );
 
-      // Add request ID to response headers
-      res.setHeader('X-Request-ID', finalContext?.requestId || requestId);
+      // Add request ID to response headers (only if headers haven't been sent)
+      if (!res.headersSent) {
+        res.setHeader('X-Request-ID', finalContext?.requestId || requestId);
+      }
 
       // Call original end
       originalEnd.call(this, chunk, encoding);
