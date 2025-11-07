@@ -36,8 +36,6 @@ async function uploadToS3ForOCR(fileBuffer, fileName, mimeType) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const s3Key = `temp-ocr/${uniqueSuffix}-${fileName}`;
     
-    logger.debug({ event: 's3_upload_start', fileName, s3Key }, 'Uploading file to S3 for OCR');
-    
     // Upload to S3 without ACL (bucket policies may already allow public access)
     await s3.upload({
       Bucket: process.env.S3_BUCKET_NAME,
@@ -92,7 +90,7 @@ async function deleteFromS3(s3Key) {
       Key: s3Key
     }).promise();
     
-    logger.debug({ event: 's3_file_deleted', s3Key }, 'Deleted temporary file from S3');
+    // File deleted successfully - no need to log routine cleanup
   } catch (error) {
     // Log but don't throw - cleanup failures shouldn't break the flow
     logger.warn(
@@ -122,8 +120,6 @@ async function extractTextFromPDF(pdfBuffer) {
     // Upload file to S3 temporarily to get public URL
     const { url: publicUrl, s3Key: key } = await uploadToS3ForOCR(pdfBuffer, 'menu.pdf', 'application/pdf');
     s3Key = key;
-    
-    logger.debug({ event: 'mistral_ocr_pdf_url_ready', publicUrl }, 'Using S3 URL for Mistral OCR');
     
     // Use public URL for OCR
     const ocrResponse = await client.ocr.process({
@@ -178,25 +174,7 @@ async function extractTextFromPDF(pdfBuffer) {
       `Mistral OCR completed for PDF. Extracted ${extractedText.length} characters.`
     );
     
-    // Log full extracted text (truncated if very long)
-    if (extractedText.length > 1000) {
-      logger.debug(
-        {
-          event: 'mistral_ocr_full_text',
-          fullText: extractedText,
-          textLength: extractedText.length
-        },
-        'Full OCR extracted text (truncated for logging)'
-      );
-    } else {
-      logger.info(
-        {
-          event: 'mistral_ocr_full_text',
-          fullText: extractedText
-        },
-        'Full OCR extracted text'
-      );
-    }
+    // Extracted text ready - no need to log full text (too verbose)
     
     return extractedText;
   } catch (error) {
@@ -247,8 +225,6 @@ async function extractTextFromImage(imageBuffer, mimeType) {
     // Upload file to S3 temporarily to get public URL
     const { url: publicUrl, s3Key: key } = await uploadToS3ForOCR(imageBuffer, fileName, mimeType);
     s3Key = key;
-    
-    logger.debug({ event: 'mistral_ocr_image_url_ready', publicUrl }, 'Using S3 URL for Mistral OCR');
     
     // Use public URL for OCR
     const ocrResponse = await client.ocr.process({
@@ -304,25 +280,7 @@ async function extractTextFromImage(imageBuffer, mimeType) {
       `Mistral OCR completed for image. Extracted ${extractedText.length} characters.`
     );
     
-    // Log full extracted text (truncated if very long)
-    if (extractedText.length > 1000) {
-      logger.debug(
-        {
-          event: 'mistral_ocr_full_text',
-          fullText: extractedText,
-          textLength: extractedText.length
-        },
-        'Full OCR extracted text (truncated for logging)'
-      );
-    } else {
-      logger.info(
-        {
-          event: 'mistral_ocr_full_text',
-          fullText: extractedText
-        },
-        'Full OCR extracted text'
-      );
-    }
+    // Extracted text ready - no need to log full text (too verbose)
     
     return extractedText;
   } catch (error) {

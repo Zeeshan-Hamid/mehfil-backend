@@ -134,18 +134,7 @@ exports.protect = catchAsync(async (req, res, next) => {
   // Update request context with userId
   requestContext.updateContext({ userId: currentUser._id.toString() });
   
-  logger.debug(
-    {
-      event: 'auth_success',
-      userId: currentUser._id.toString(),
-      role: currentUser.role,
-      http: {
-        method: req.method,
-        path: req.path,
-      },
-    },
-    `Authentication successful for user ${currentUser._id}`
-  );
+  // Authentication successful - no need to log every successful auth (too verbose)
  
   next();
 });

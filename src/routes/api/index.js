@@ -27,6 +27,9 @@ const taxRoutes = require('./taxRoutes');
 const blogRoutes = require('./blogRoutes');
 const marketplaceRoutes = require('./marketplaceRoutes');
 const menuChatbotRoutes = require('./menuChatbotRoutes');
+const sonioxRoutes = require('./sonioxRoutes');
+const aiConsultantRoutes = require('./aiConsultantRoutes');
+const demoRequestRoutes = require('./demoRequestRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -70,5 +73,8 @@ router.use('/tax', taxRoutes);
 router.use('/blogs', blogRoutes);
 router.use('/marketplace', marketplaceRoutes);
 router.use('/menu-chatbot', menuChatbotRoutes);
+router.use('/soniox', sonioxRoutes);
+router.use('/ai-consultant', aiConsultantRoutes);
+router.use('/demo-request', demoRequestRoutes);
 
 module.exports = router; 

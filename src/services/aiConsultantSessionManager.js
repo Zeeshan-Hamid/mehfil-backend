@@ -30,19 +30,17 @@ function createSession() {
     sessionId,
     createdAt: new Date(),
     lastAccessedAt: new Date(),
-    menuData: null,
-    conversationHistory: [],
-    vectorCollectionCreated: false
+    conversationHistory: []
   };
 
   sessions.set(sessionId, session);
 
   logger.info(
     {
-      event: 'session_created',
+      event: 'ai_consultant_session_created',
       sessionId
     },
-    `Created new session: ${sessionId}`
+    `Created new AI consultant session: ${sessionId}`
   );
 
   return sessionId;
@@ -62,35 +60,6 @@ function getSession(sessionId) {
   }
   
   return session;
-}
-
-/**
- * Update session menu data
- * @param {string} sessionId - Session ID
- * @param {Object} menuData - Processed menu data
- * @returns {boolean} Success status
- */
-function setMenuData(sessionId, menuData) {
-  const session = getSession(sessionId);
-  
-  if (!session) {
-    logger.warn({ event: 'session_not_found', sessionId }, 'Session not found when setting menu data');
-    return false;
-  }
-
-  session.menuData = menuData;
-  session.lastAccessedAt = new Date();
-
-  logger.info(
-    {
-      event: 'menu_data_set',
-      sessionId,
-      itemCount: menuData?.itemCount || 0
-    },
-    `Menu data set for session: ${sessionId}`
-  );
-
-  return true;
 }
 
 /**
@@ -135,27 +104,6 @@ function getConversationHistory(sessionId) {
 }
 
 /**
- * Mark vector collection as created
- * @param {string} sessionId - Session ID
- */
-function markVectorCollectionCreated(sessionId) {
-  const session = getSession(sessionId);
-  if (session) {
-    session.vectorCollectionCreated = true;
-  }
-}
-
-/**
- * Check if vector collection exists for session
- * @param {string} sessionId - Session ID
- * @returns {boolean}
- */
-function hasVectorCollection(sessionId) {
-  const session = getSession(sessionId);
-  return session ? session.vectorCollectionCreated : false;
-}
-
-/**
  * Delete session
  * @param {string} sessionId - Session ID
  * @returns {boolean} Success status
@@ -166,10 +114,10 @@ function deleteSession(sessionId) {
   if (deleted) {
     logger.info(
       {
-        event: 'session_deleted',
+        event: 'ai_consultant_session_deleted',
         sessionId
       },
-      `Deleted session: ${sessionId}`
+      `Deleted AI consultant session: ${sessionId}`
     );
   }
 
@@ -187,18 +135,15 @@ function getSessionStatus(sessionId) {
   if (!session) {
     return {
       exists: false,
-      hasMenu: false,
       messageCount: 0
     };
   }
 
   return {
     exists: true,
-    hasMenu: !!session.menuData,
     messageCount: session.conversationHistory.length,
     createdAt: session.createdAt,
-    lastAccessedAt: session.lastAccessedAt,
-    itemCount: session.menuData?.itemCount || 0
+    lastAccessedAt: session.lastAccessedAt
   };
 }
 
@@ -215,25 +160,22 @@ function cleanupExpiredSessions() {
     if (timeSinceLastAccess > SESSION_TIMEOUT_MS) {
       sessions.delete(sessionId);
       cleanedCount++;
-      
-      // Session expired and cleaned up - no need to log individual cleanups
     }
   }
 
   if (cleanedCount > 0) {
     logger.info(
       {
-        event: 'cleanup_completed',
+        event: 'ai_consultant_cleanup_completed',
         cleanedCount,
         remainingSessions: sessions.size
       },
-      `Cleaned up ${cleanedCount} expired sessions`
+      `Cleaned up ${cleanedCount} expired AI consultant sessions`
     );
   }
 }
 
 // Start cleanup interval only if not in test environment
-// Check if we're running tests by checking for test-related environment variables or module paths
 const isTestEnvironment = process.env.NODE_ENV === 'test' || 
                          process.argv.some(arg => arg.includes('test') || arg.includes('jest'));
 
@@ -243,7 +185,7 @@ if (!isTestEnvironment) {
   
   // Cleanup on process exit
   const cleanup = () => {
-    logger.info({ event: 'shutting_down' }, 'Clearing all sessions on shutdown');
+    logger.info({ event: 'ai_consultant_shutting_down' }, 'Clearing all AI consultant sessions on shutdown');
     clearInterval(cleanupInterval);
     sessions.clear();
   };
@@ -262,11 +204,8 @@ if (!isTestEnvironment) {
 module.exports = {
   createSession,
   getSession,
-  setMenuData,
   addMessage,
   getConversationHistory,
-  markVectorCollectionCreated,
-  hasVectorCollection,
   deleteSession,
   getSessionStatus
 };
