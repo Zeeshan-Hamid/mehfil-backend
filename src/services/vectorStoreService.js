@@ -426,15 +426,7 @@ async function searchSimilarItems(sessionId, query, topK = 5) {
         }
       }
       
-      logger.debug(
-        {
-          event: 'similarity_search_chroma',
-          sessionId,
-          query,
-          resultCount: items.length
-        },
-        `Found ${items.length} similar items using ChromaDB`
-      );
+      // Search completed - no need to log routine operations
 
       return items;
     }
@@ -464,15 +456,7 @@ async function searchSimilarItems(sessionId, query, topK = 5) {
     itemsWithSimilarity.sort((a, b) => b.similarity - a.similarity);
     const topItems = itemsWithSimilarity.slice(0, topK);
     
-    logger.debug(
-      {
-        event: 'similarity_search_in_memory',
-        sessionId,
-        query,
-        resultCount: topItems.length
-      },
-      `Found ${topItems.length} similar items using in-memory store`
-    );
+    // Search completed - no need to log routine operations
 
     return topItems;
   } catch (error) {
@@ -515,15 +499,7 @@ async function deleteSessionCollection(sessionId) {
         );
       }
     } catch (error) {
-      // Collection might not exist, that's fine
-      logger.debug(
-        {
-          event: 'collection_delete_attempt',
-          sessionId,
-          error: error?.message
-        },
-        'ChromaDB collection may not exist for deletion'
-      );
+      // Collection might not exist, that's fine - no need to log
     }
   }
   

@@ -164,7 +164,7 @@ async function processChatQueryStream(sessionId, userMessage, responseStream) {
           responseStream.write(`data: ${JSON.stringify({ content: errorMsg, done: true })}\n\n`);
           responseStream.end();
         } catch (error) {
-          logger.debug({ event: 'error_stream_write_failed' }, 'Failed to write error to stream');
+          // Stream write failed - client likely disconnected, no need to log
         }
       }
       return errorMsg;
@@ -250,7 +250,7 @@ async function processChatQueryStream(sessionId, userMessage, responseStream) {
           responseStream.write(`data: ${JSON.stringify({ content: errorMsg, done: true, error: true })}\n\n`);
           responseStream.end();
         } catch (writeError) {
-          logger.debug({ event: 'error_stream_write_failed', error: writeError.message }, 'Failed to write error to stream');
+          // Stream write failed - client likely disconnected, no need to log
         }
       }
       return errorMsg;
@@ -267,12 +267,11 @@ async function processChatQueryStream(sessionId, userMessage, responseStream) {
           // Send chunk to client via SSE
           responseStream.write(`data: ${JSON.stringify({ content, done: false })}\n\n`);
         } catch (writeError) {
-          // Client disconnected or stream closed
-          logger.debug({ event: 'stream_write_error', error: writeError.message }, 'Error writing to stream, client may have disconnected');
+          // Client disconnected or stream closed - no need to log routine disconnections
           break;
         }
       } else if (responseStream.destroyed) {
-        logger.debug({ event: 'stream_destroyed', sessionId }, 'Stream destroyed during streaming');
+        // Stream destroyed - client disconnected, no need to log
         break;
       }
     }
@@ -283,7 +282,7 @@ async function processChatQueryStream(sessionId, userMessage, responseStream) {
         responseStream.write(`data: ${JSON.stringify({ content: '', done: true })}\n\n`);
         responseStream.end();
       } catch (endError) {
-        logger.debug({ event: 'stream_end_error', error: endError.message }, 'Error ending stream');
+        // Error ending stream - likely already closed, no need to log
       }
     }
 
@@ -323,7 +322,7 @@ async function processChatQueryStream(sessionId, userMessage, responseStream) {
         responseStream.write(`data: ${JSON.stringify({ content: errorMsg, done: true, error: true })}\n\n`);
         responseStream.end();
       } catch (error) {
-        logger.debug({ event: 'error_stream_write_failed', error: error.message }, 'Failed to write error to stream');
+        // Stream write failed - client likely disconnected, no need to log
       }
     }
     return errorMsg;

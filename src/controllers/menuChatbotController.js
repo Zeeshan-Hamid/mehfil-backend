@@ -14,16 +14,7 @@ exports.uploadMenu = async (req, res) => {
     // Get sessionId from body (multipart/form-data), query, or create new one
     let sessionId = req.body?.sessionId || req.query?.sessionId;
     
-    // Log for debugging
-    logger.debug(
-      {
-        event: 'upload_menu_session_check',
-        sessionId,
-        bodyKeys: Object.keys(req.body || {}),
-        hasFile: !!req.file
-      },
-      'Checking session for menu upload'
-    );
+    // Session check handled below
 
     // Create session if not provided
     if (!sessionId) {
@@ -80,16 +71,6 @@ exports.uploadMenu = async (req, res) => {
     // Store menu data in session (no vector database needed)
     sessionManager.setMenuData(sessionId, menuData);
 
-    logger.debug(
-      {
-        event: 'menu_data_stored_in_session',
-        sessionId,
-        itemCount: menuData.itemCount,
-        rawTextLength: menuData.rawText?.length || 0
-      },
-      'Menu data stored in session for LLM context'
-    );
-
     logger.info(
       {
         event: 'menu_upload_success',
@@ -101,7 +82,6 @@ exports.uploadMenu = async (req, res) => {
     );
 
     // Generate contextual questions based on the menu
-    logger.debug({ event: 'generating_menu_questions', sessionId }, 'Generating menu questions');
     const suggestedQuestions = await generateMenuQuestions(menuData);
 
     res.status(200).json({
@@ -192,7 +172,7 @@ exports.chat = async (req, res) => {
 
     // Handle client disconnect
     req.on('close', () => {
-      logger.debug({ event: 'client_disconnected', sessionId }, 'Client disconnected during streaming');
+      // Client disconnected during streaming - no need to log routine disconnections
       if (!res.headersSent && !res.destroyed) {
         res.end();
       }
@@ -229,8 +209,7 @@ exports.chat = async (req, res) => {
         res.write(`data: ${JSON.stringify({ content: errorMsg, done: true, error: true })}\n\n`);
         res.end();
       } catch (writeError) {
-        // Stream might already be closed, ignore
-        logger.debug({ event: 'stream_already_closed', error: writeError.message }, 'Stream already closed when trying to send error');
+        // Stream might already be closed, ignore - no need to log
       }
     }
   }

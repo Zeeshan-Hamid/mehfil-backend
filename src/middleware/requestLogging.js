@@ -45,22 +45,6 @@ function requestLoggingMiddleware(req, res, next) {
 
   // Run request within context
   requestContext.run(context, () => {
-    // Log incoming request
-    logger.info(
-      {
-        event: 'request_started',
-        http: {
-          method: req.method,
-          path: req.path,
-          url: req.originalUrl || req.url,
-          query: req.query,
-          ip: clientIp,
-          userAgent,
-        },
-      },
-      `Request started: ${req.method} ${req.path}`
-    );
-
     // Override res.end to capture response
     const originalEnd = res.end;
     res.end = function (chunk, encoding) {
@@ -78,20 +62,22 @@ function requestLoggingMiddleware(req, res, next) {
       // Get final context for logging
       const finalContext = requestContext.getContext();
 
-      // Log response
-      logger.info(
-        {
-          event: 'request_completed',
-          http: {
-            method: req.method,
-            path: req.path,
-            url: req.originalUrl || req.url,
-            statusCode: res.statusCode,
-            durationMs: Math.round(durationMs * 100) / 100, // Round to 2 decimals
+      // Only log errors (4xx and 5xx status codes) - successful requests are logged by performance middleware if slow
+      if (res.statusCode >= 400) {
+        logger.warn(
+          {
+            event: 'request_error',
+            http: {
+              method: req.method,
+              path: req.path,
+              url: req.originalUrl || req.url,
+              statusCode: res.statusCode,
+              durationMs: Math.round(durationMs * 100) / 100,
+            },
           },
-        },
-        `Request completed: ${req.method} ${req.path} - ${res.statusCode}`
-      );
+          `Request error: ${req.method} ${req.path} - ${res.statusCode}`
+        );
+      }
 
       // Add request ID to response headers (only if headers haven't been sent)
       if (!res.headersSent) {
