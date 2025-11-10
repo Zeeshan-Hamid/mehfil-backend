@@ -59,7 +59,15 @@ exports.createEvent = async (req, res, next) => {
     }
     if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
     if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
-    
+    if (eventData.serviceArea && typeof eventData.serviceArea === 'string') {
+      try {
+        eventData.serviceArea = JSON.parse(eventData.serviceArea);
+      } catch (parseError) {
+        console.error('Backend - Error parsing serviceArea:', parseError);
+        // Set default if parsing fails
+        eventData.serviceArea = { serviceAreaType: 'within_city' };
+      }
+    }
     
     // Handle boolean fields that come as strings from form-data
     if (eventData.flexible_price !== undefined) {
@@ -185,6 +193,15 @@ exports.updateEvent = catchAsync(async (req, res, next) => {
   }
   if (eventData.tags) eventData.tags = JSON.parse(eventData.tags);
   if (eventData.flatPrice) eventData.flatPrice = JSON.parse(eventData.flatPrice);
+  if (eventData.serviceArea && typeof eventData.serviceArea === 'string') {
+    try {
+      eventData.serviceArea = JSON.parse(eventData.serviceArea);
+    } catch (parseError) {
+      console.error('Backend - Error parsing serviceArea:', parseError);
+      // Set default if parsing fails
+      eventData.serviceArea = { serviceAreaType: 'within_city' };
+    }
+  }
   
   // Handle boolean fields that come as strings from form-data
   if (eventData.flexible_price !== undefined) {
