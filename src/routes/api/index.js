@@ -30,6 +30,8 @@ const menuChatbotRoutes = require('./menuChatbotRoutes');
 const sonioxRoutes = require('./sonioxRoutes');
 const aiConsultantRoutes = require('./aiConsultantRoutes');
 const demoRequestRoutes = require('./demoRequestRoutes');
+const agentRoutes = require('./agentRoutes');
+const leadGenerationRoutes = require('./leadGenerationRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -76,5 +78,7 @@ router.use('/menu-chatbot', menuChatbotRoutes);
 router.use('/soniox', sonioxRoutes);
 router.use('/ai-consultant', aiConsultantRoutes);
 router.use('/demo-request', demoRequestRoutes);
+router.use('/agent', agentRoutes);
+router.use('/lead-generation', leadGenerationRoutes);
 
 module.exports = router; 

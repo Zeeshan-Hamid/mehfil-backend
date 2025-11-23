@@ -21,7 +21,7 @@ for (const varName of requiredEnvVars) {
 // Set default value for FRONTEND_URL if not provided
 if (!process.env.FRONTEND_URL) {
   process.env.FRONTEND_URL = 'http://localhost:3000';
-  
+
 }
 
 const express = require('express');
@@ -53,7 +53,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
+    origin: process.env.NODE_ENV === 'production'
       ? [process.env.FRONTEND_URL, 'https://www.mehfil.app', 'https://mehfil.app']
       : true, // Allow all origins in development
     methods: ["GET", "POST"],
@@ -119,7 +119,7 @@ app.use('/api', apiRoutes);
 
 // Welcome route
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Welcome to Mehfil API - Event Planning Platform for Muslim & Desi Communities',
     version: '1.0.0',
     documentation: '/api/health'
