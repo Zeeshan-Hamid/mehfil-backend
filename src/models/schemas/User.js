@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema(
     // Authentication & Security (Common)
     authProvider: {
       type: String,
-      enum: ["email", "google", "facebook", "vendor-created"],
+      enum: ["email", "google", "apple", "facebook", "vendor-created"],
       default: "email",
     },
 
@@ -62,6 +62,10 @@ const userSchema = new mongoose.Schema(
         sparse: true,
       },
       facebookId: {
+        type: String,
+        sparse: true,
+      },
+      appleId: {
         type: String,
         sparse: true,
       },
@@ -663,6 +667,7 @@ userSchema.index({ "customerProfile.preferences.categories": 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ "socialLogin.googleId": 1 }, { sparse: true });
 userSchema.index({ "socialLogin.facebookId": 1 }, { sparse: true });
+userSchema.index({ "socialLogin.appleId": 1 }, { sparse: true });
 userSchema.index({ "vendorProfile.businessName": 1 });
 userSchema.index({ "vendorProfile.primaryServiceCategory": 1 });
 userSchema.index({ "vendorProfile.serviceCategories": 1 });

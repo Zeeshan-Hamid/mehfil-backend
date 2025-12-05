@@ -27,6 +27,7 @@ const {
   getClientIdForPlatform,
   getAllClientIds 
 } = require('../../utils/googleAuth');
+const { verifyAppleIdentityToken } = require('../../utils/appleAuth');
 
 const {
   validateCustomerSignup,
@@ -1336,6 +1337,259 @@ router.post('/google/mobile/verify', detectPlatform, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Mobile Google OAuth verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during mobile authentication',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Mobile Apple OAuth Token Verification
+// @route   POST /api/auth/apple/mobile/verify
+// @desc    Verify Apple identity token from iOS app
+// @access  Public
+router.post('/apple/mobile/verify', detectPlatform, async (req, res) => {
+  try {
+    const { identityToken, role, platform } = req.body;
+    
+    if (!identityToken || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: identityToken and role'
+      });
+    }
+
+    if (!['customer', 'vendor'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be customer or vendor'
+      });
+    }
+
+    // SECURITY: Verify the identity token with Apple's servers
+    const verificationResult = await verifyAppleIdentityToken(identityToken);
+    
+    if (!verificationResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid Apple identity token',
+        error: verificationResult.error,
+        details: verificationResult.details
+      });
+    }
+
+    const appleUser = verificationResult.data;
+    console.log('✅ Apple Auth Success:', {
+      appleId: appleUser.appleId,
+      email: appleUser.email || 'hidden',
+      role: role,
+      platform: platform || req.platform?.type || 'ios',
+    });
+
+    // Check if user already exists by Apple ID
+    let existingUser = await User.findOne({ 'socialLogin.appleId': appleUser.appleId });
+    
+    if (existingUser) {
+      // User exists, log them in
+      const token = generateToken(existingUser._id);
+      
+      const userResponse = existingUser.toObject();
+      delete userResponse.password;
+      userResponse.profileCompleted = existingUser.role === 'customer' ? 
+        existingUser.customerProfile.profileCompleted : 
+        existingUser.vendorProfile.profileCompleted;
+      
+      return res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: userResponse,
+          token: token
+        }
+      });
+    }
+
+    // Check if user exists with this email (if email is provided)
+    if (appleUser.email) {
+      existingUser = await User.findOne({ email: appleUser.email });
+      
+      if (existingUser) {
+        console.log('👤 Existing user found by email - linking Apple account');
+        // Link Apple account to existing user
+        existingUser.socialLogin = existingUser.socialLogin || {};
+        existingUser.socialLogin.appleId = appleUser.appleId;
+        existingUser.authProvider = existingUser.authProvider || 'apple';
+        if (appleUser.emailVerified) {
+          existingUser.emailVerified = true;
+        }
+        await existingUser.save({ validateBeforeSave: false });
+        
+        const token = generateToken(existingUser._id);
+        const userResponse = existingUser.toObject();
+        delete userResponse.password;
+        userResponse.profileCompleted = existingUser.role === 'customer' ? 
+          existingUser.customerProfile.profileCompleted : 
+          existingUser.vendorProfile.profileCompleted;
+        
+        return res.json({
+          success: true,
+          message: 'Apple account linked successfully',
+          data: {
+            user: userResponse,
+            token: token
+          }
+        });
+      }
+    }
+
+    // IMPORTANT: If email is not provided (user chose to hide it), we need to handle this
+    // For now, we'll require email on first sign-up. In production, you might want to
+    // prompt the user to provide email or use a different identifier
+    if (!appleUser.email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required for account creation. Please sign in with Apple and grant email permission.'
+      });
+    }
+
+    // Create new user with VERIFIED Apple data
+    const newUser = new User({
+      email: appleUser.email,
+      authProvider: 'apple',
+      socialLogin: { appleId: appleUser.appleId },
+      role: role,
+      emailVerified: appleUser.emailVerified,
+      phoneNumber: null,
+    });
+
+    if (role === 'customer') {
+      newUser.customerProfile = {
+        fullName: appleUser.name || '',
+        gender: null,
+        location: {
+          city: null,
+          state: null,
+          country: null,
+          zipCode: null
+        },
+        profileImage: null,
+        preferences: {
+          categories: [],
+          budgetRange: null,
+          preferredLanguages: [],
+          genderPreference: null,
+          culturalPreferences: []
+        },
+        preferredVendors: [],
+        customerCart: [],
+        profileCompleted: false
+      };
+    }
+
+    if (role === 'vendor') {
+      newUser.vendorProfile = {
+        ownerName: appleUser.name || '',
+        businessName: null,
+        profileImage: null,
+        businessAddress: {
+          street: null,
+          city: null,
+          state: null,
+          zipCode: null,
+          country: null
+        },
+        timezone: null,
+        geo: { type: 'Point', coordinates: [0, 0] },
+        serviceDescription: null,
+        experienceYears: null,
+        serviceCategories: [],
+        languagesSpoken: [],
+        serviceAreas: [],
+        halalCertification: {
+          hasHalalCert: false,
+          status: 'unverified',
+          renewalReminders: {},
+          certificationFile: null,
+          certificateNumber: null,
+          expiryDate: null,
+          issuingAuthority: null,
+          verificationDate: null,
+        },
+        portfolio: {
+          images: [],
+          videos: [],
+          description: null,
+          beforeAfterPhotos: []
+        },
+        socialLinks: {},
+        availability: {
+          calendar: [],
+          workingDays: [],
+          workingHours: { start: null, end: null },
+          advanceBookingDays: null,
+          blackoutDates: []
+        },
+        bookingRules: {
+          minNoticeHours: null,
+          cancellationPolicy: null,
+          depositRequired: null,
+          depositPercentage: null,
+          paymentTerms: null
+        },
+        pricing: {
+          startingPrice: null,
+          maxPrice: null,
+          currency: 'USD',
+          pricingType: null,
+          packageDeals: []
+        },
+        paymentInfo: {},
+        rating: {
+          average: 0,
+          totalReviews: 0,
+          breakdown: { fiveStar: 0, fourStar: 0, threeStar: 0, twoStar: 0, oneStar: 0 }
+        },
+        approvalHistory: [],
+        stats: {
+            totalBookings: 0,
+            completedBookings: 0,
+            cancelledBookings: 0,
+            responseTime: 0,
+            responseRate: 0,
+            repeatCustomers: 0
+        },
+        verifications: {
+            businessVerified: false,
+            backgroundCheckComplete: false,
+            insuranceVerified: false
+        },
+        team: [],
+        tags: [],
+        profileCompleted: false
+      };
+    }
+
+    await newUser.save({ validateBeforeSave: false });
+    
+    const token = generateToken(newUser._id);
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
+    userResponse.profileCompleted = role === 'customer' ? 
+      newUser.customerProfile.profileCompleted : 
+      newUser.vendorProfile.profileCompleted;
+    
+    res.json({
+      success: true,
+      message: 'Account created successfully',
+      data: {
+        user: userResponse,
+        token: token
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Mobile Apple OAuth verification error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error during mobile authentication',
