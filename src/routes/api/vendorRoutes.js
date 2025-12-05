@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, restrictTo } = require('../../middleware/authMiddleware');
 const { getVendorReviews } = require('../../controllers/reviewController');
-const { getCurrentVendorProfile, updateVendorGeneralProfile } = require('../../controllers/vendorController');
+const { getCurrentVendorProfile, updateVendorGeneralProfile, deleteVendorAccount } = require('../../controllers/vendorController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 const { validateVendorGeneralProfile } = require('../../validators/vendorValidators');
 
@@ -20,5 +20,10 @@ router.put('/profile/general', uploadInMemory.fields([
 
 // GET /api/vendor/reviews - Fetches all reviews for the logged-in vendor
 router.get('/reviews', getVendorReviews);
+
+// @route   DELETE /api/vendor/account
+// @desc    Permanently delete vendor account and related data
+// @access  Private (Vendors only)
+router.delete('/account', deleteVendorAccount);
 
 module.exports = router; 

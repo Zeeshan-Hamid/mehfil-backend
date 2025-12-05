@@ -1,5 +1,12 @@
 const User = require('../models/User');
 const Event = require('../models/Event');
+const Booking = require('../models/Booking');
+const Review = require('../models/Review');
+const CheckoutSession = require('../models/CheckoutSession');
+const Notification = require('../models/Notification');
+const Message = require('../models/Message');
+const Invoice = require('../models/Invoice');
+const ViewCount = require('../models/ViewCount');
 const { processAndUploadProfileImage } = require('../services/fileUploadService');
 const { validationResult } = require('express-validator');
 
@@ -249,5 +256,98 @@ exports.updateVendorGeneralProfile = catchAsync(async (req, res, next) => {
         vendorVerificationNotes: vendor.vendorVerificationNotes
       }
     }
+  });
+});
+
+// @desc    Delete vendor account and related data
+// @route   DELETE /api/vendor/account
+// @access  Private (Vendors only)
+exports.deleteVendorAccount = catchAsync(async (req, res, next) => {
+  const vendorId = req.user.id;
+
+  const vendor = await User.findById(vendorId);
+  if (!vendor) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Vendor not found'
+    });
+  }
+
+  if (vendor.role !== 'vendor') {
+    return res.status(403).json({
+      status: 'fail',
+      message: 'Access denied. Only vendors can delete their account.'
+    });
+  }
+
+  // Check for active bookings
+  const activeBookings = await Booking.find({ 
+    vendor: vendorId, 
+    status: { $in: ['Pending', 'Confirmed'] } 
+  });
+  
+  if (activeBookings.length > 0) {
+    return res.status(400).json({
+      status: 'fail',
+      message: `Cannot delete account with ${activeBookings.length} active booking(s). Please cancel or complete all bookings first.`,
+      activeBookings: activeBookings.length
+    });
+  }
+
+  // Check for pending payments
+  const pendingPayments = await CheckoutSession.find({ 
+    vendorId: vendorId, 
+    status: 'pending' 
+  });
+  
+  if (pendingPayments.length > 0) {
+    return res.status(400).json({
+      status: 'fail',
+      message: `Cannot delete account with ${pendingPayments.length} pending payment(s). Please resolve all payment issues first.`,
+      pendingPayments: pendingPayments.length
+    });
+  }
+
+  // Perform cleanup of related data
+  try {
+    await Promise.all([
+      // Delete all events (listings) created by this vendor
+      Event.deleteMany({ vendor: vendorId }),
+      // Delete all bookings for this vendor
+      Booking.deleteMany({ vendor: vendorId }),
+      // Delete all reviews for this vendor
+      Review.deleteMany({ vendor: vendorId }),
+      // Delete all checkout sessions for this vendor
+      CheckoutSession.deleteMany({ vendorId: vendorId }),
+      // Delete all notifications for this vendor
+      Notification.deleteMany({ 
+        $or: [
+          { recipient: vendorId },
+          { sender: vendorId }
+        ]
+      }),
+      // Delete all messages for this vendor
+      Message.deleteMany({
+        $or: [
+          { sender: vendorId },
+          { recipient: vendorId }
+        ]
+      }),
+      // Delete all invoices for this vendor
+      Invoice.deleteMany({ vendor: vendorId }),
+      // Delete all view counts for this vendor
+      ViewCount.deleteMany({ vendorId: vendorId })
+    ]);
+  } catch (cleanupError) {
+    console.error('Error during account cleanup:', cleanupError);
+    // Continue to delete user even if some cleanup operations fail
+  }
+
+  // Finally delete the user account itself
+  await User.findByIdAndDelete(vendorId);
+
+  return res.status(200).json({
+    status: 'success',
+    message: 'Your account has been permanently deleted.'
   });
 });
