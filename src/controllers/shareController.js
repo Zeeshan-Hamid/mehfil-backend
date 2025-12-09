@@ -227,3 +227,32 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
   }
 });
 
+/**
+ * @desc    Universal/App Link landing for /app/event/:eventId
+ *          Avoids 404 JSON when the app is not installed and the URL is opened in a browser.
+ * @route   GET /app/event/:eventId
+ * @access  Public
+ */
+exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
+  const { eventId } = req.params;
+
+  // Validate event exists (ID or slug)
+  const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+  let event = null;
+  if (isValidObjectId) {
+    event = await Event.findById(eventId);
+  } else {
+    event = await Event.findOne({ slug: eventId });
+  }
+
+  if (!event) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/404`);
+  }
+
+  // If the app is installed, iOS/Android should intercept before this response is shown.
+  // If not installed, send users to the web event page so they don’t see a JSON 404.
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  return res.redirect(`${frontendUrl}/event/${eventId}`);
+});
+
