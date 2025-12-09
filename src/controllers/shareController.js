@@ -103,7 +103,12 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
     ? `https://apps.apple.com/app/id${iOS_APP_STORE_ID}?pt=event&id=${eventId}`
     : 'https://apps.apple.com'; // Fallback to App Store home if ID not configured
   const playStoreUrl = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_NAME}&referrer=event_${eventId}`;
-  const webUrl = `${frontendUrl}/event/${eventId}`;
+  
+  // Use slug if available, otherwise use ID
+  // Frontend route pattern can be configured via FRONTEND_EVENT_ROUTE (default: /events/)
+  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/events/';
+  const eventIdentifier = event.slug || eventId;
+  const webUrl = `${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`;
 
   // Smart redirect based on device
   if (device.isIOS) {
@@ -251,8 +256,14 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
   }
 
   // If the app is installed, iOS/Android should intercept before this response is shown.
-  // If not installed, send users to the web event page so they don’t see a JSON 404.
+  // If not installed, send users to the web event page so they don't see a JSON 404.
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  return res.redirect(`${frontendUrl}/event/${eventId}`);
+  
+  // Use slug if available, otherwise use ID
+  // Frontend route pattern can be configured via FRONTEND_EVENT_ROUTE (default: /events/)
+  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/events/';
+  const eventIdentifier = event.slug || eventId;
+  
+  return res.redirect(`${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`);
 });
 
