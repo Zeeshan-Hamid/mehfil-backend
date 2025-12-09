@@ -106,7 +106,7 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
   
   // Use slug if available, otherwise use ID
   // Frontend route pattern can be configured via FRONTEND_EVENT_ROUTE (default: /events/)
-  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/events/';
+  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/vendor_listing_details';
   const eventIdentifier = event.slug || eventId;
   const webUrl = `${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`;
 
@@ -159,9 +159,16 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
         </div>
         <script>
           // Try to open app via Universal Link
+          // Use a hidden iframe to attempt Universal Link without visible redirect
+          var iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          iframe.src = '${universalLink}';
+          document.body.appendChild(iframe);
+          
+          // Also try direct navigation
           window.location.href = '${universalLink}';
           
-          // Fallback to App Store after 2 seconds
+          // Fallback to App Store after 2 seconds if app doesn't open
           setTimeout(function() {
             window.location.href = '${appStoreUrl}';
           }, 2000);
@@ -261,9 +268,42 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
   
   // Use slug if available, otherwise use ID
   // Frontend route pattern can be configured via FRONTEND_EVENT_ROUTE (default: /events/)
-  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/events/';
+  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/vendor_listing_details';
   const eventIdentifier = event.slug || eventId;
   
   return res.redirect(`${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`);
 });
 
+/**
+ * @desc    Serve Apple App Site Association file for Universal Links
+ * @route   GET /.well-known/apple-app-site-association
+ * @access  Public
+ */
+exports.serveAppleAppSiteAssociation = (req, res) => {
+  const IOS_APP_ID = process.env.IOS_APP_ID || 'TEAM_ID.com.moneebb.mehfilapp';
+  
+  // Split the app ID to get team ID and bundle ID
+  const parts = IOS_APP_ID.split('.');
+  const teamId = parts[0];
+  const bundleId = parts.slice(1).join('.');
+
+  const association = {
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: `${teamId}.${bundleId}`,
+          paths: [
+            "/app/event/*",
+            "/app/listing/*",
+            "/share/event/*",
+            "/share/listing/*"
+          ]
+        }
+      ]
+    }
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.json(association);
+};
