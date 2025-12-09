@@ -109,9 +109,12 @@ const shareRedirectRoutes = require('./src/routes/shareRedirectRoutes');
 app.use('/share', shareRedirectRoutes);
 
 // Universal/App Link routes (must be at root level for deep linking)
-const { handleAppLinkLanding } = require('./src/controllers/shareController');
+const { handleAppLinkLanding, serveAppleAppSiteAssociation } = require('./src/controllers/shareController');
 app.get('/app/event/:eventId', handleAppLinkLanding);
 app.get('/app/listing/:eventId', handleAppLinkLanding); // alias
+
+// Apple App Site Association file (required for Universal Links)
+app.get('/.well-known/apple-app-site-association', serveAppleAppSiteAssociation);
 
 // Welcome route
 app.get('/', (req, res) => {
