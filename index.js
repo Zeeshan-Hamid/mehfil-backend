@@ -108,6 +108,11 @@ app.use('/api', apiRoutes);
 const shareRedirectRoutes = require('./src/routes/shareRedirectRoutes');
 app.use('/share', shareRedirectRoutes);
 
+// Universal/App Link routes (must be at root level for deep linking)
+const { handleAppLinkLanding } = require('./src/controllers/shareController');
+app.get('/app/event/:eventId', handleAppLinkLanding);
+app.get('/app/listing/:eventId', handleAppLinkLanding); // alias
+
 // Welcome route
 app.get('/', (req, res) => {
   res.json({ 
