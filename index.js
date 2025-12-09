@@ -104,9 +104,9 @@ cronService.init();
 // API Routes
 app.use('/api', apiRoutes);
 
-// Share redirect route (must be before 404 handler)
-const { handleShareRedirect } = require('./src/controllers/shareController');
-app.get('/share/event/:eventId', handleShareRedirect);
+// Share redirect routes (before welcome and 404)
+const shareRedirectRoutes = require('./src/routes/shareRedirectRoutes');
+app.use('/share', shareRedirectRoutes);
 
 // Welcome route
 app.get('/', (req, res) => {
