@@ -111,128 +111,11 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
   const webUrl = `${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`;
 
   // Smart redirect based on device
-  if (device.isIOS) {
-    // Serve HTML page that tries Universal Link, then falls back to App Store
-    return res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Opening Event...</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="apple-itunes-app" content="app-id=${iOS_APP_STORE_ID || ''}">
-        <meta http-equiv="refresh" content="2;url=${appStoreUrl}">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-          }
-          .container {
-            text-align: center;
-            padding: 2rem;
-          }
-          .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid white;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="spinner"></div>
-          <p>Opening event in app...</p>
-        </div>
-        <script>
-          // Try to open app via Universal Link
-          // Use a hidden iframe to attempt Universal Link without visible redirect
-          var iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          iframe.src = '${universalLink}';
-          document.body.appendChild(iframe);
-          
-          // Also try direct navigation
-          window.location.href = '${universalLink}';
-          
-          // Fallback to App Store after 2 seconds if app doesn't open
-          setTimeout(function() {
-            window.location.href = '${appStoreUrl}';
-          }, 2000);
-        </script>
-      </body>
-      </html>
-    `);
-  } else if (device.isAndroid) {
-    // Serve HTML page that tries App Link, then falls back to Play Store
-    return res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Opening Event...</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta http-equiv="refresh" content="2;url=${playStoreUrl}">
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-          }
-          .container {
-            text-align: center;
-            padding: 2rem;
-          }
-          .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid white;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="spinner"></div>
-          <p>Opening event in app...</p>
-        </div>
-        <script>
-          // Try to open app via App Link
-          window.location.href = '${universalLink}';
-          
-          // Fallback to Play Store after 2 seconds
-          setTimeout(function() {
-            window.location.href = '${playStoreUrl}';
-          }, 2000);
-        </script>
-      </body>
-      </html>
-    `);
+  if (device.isMobile) {
+    // For mobile (iOS/Android), redirect to Universal Link path
+    // Universal Links/App Links will handle opening the app
+    // If app not installed, /app/event/:id will serve a fallback page
+    return res.redirect(universalLink);
   } else {
     // Web/Desktop - redirect to web version
     return res.redirect(webUrl);
@@ -241,7 +124,9 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
 
 /**
  * @desc    Universal/App Link landing for /app/event/:eventId
- *          Avoids 404 JSON when the app is not installed and the URL is opened in a browser.
+ *          Serves a simple HTML page that lets Universal Links work.
+ *          If app is installed, iOS/Android will intercept and open the app.
+ *          If app is not installed, shows a download page with store links.
  * @route   GET /app/event/:eventId
  * @access  Public
  */
@@ -262,16 +147,184 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
     return res.redirect(`${frontendUrl}/404`);
   }
 
-  // If the app is installed, iOS/Android should intercept before this response is shown.
-  // If not installed, send users to the web event page so they don't see a JSON 404.
+  // Detect device
+  const userAgent = req.headers['user-agent'] || '';
+  const device = detectDevice(userAgent);
+  
+  const baseUrl = getBaseUrl(req);
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const iOS_APP_STORE_ID = process.env.IOS_APP_STORE_ID || '';
+  const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.moneebb.mehfilappfrontend';
   
   // Use slug if available, otherwise use ID
-  // Frontend route pattern can be configured via FRONTEND_EVENT_ROUTE (default: /events/)
   const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/vendor_listing_details';
   const eventIdentifier = event.slug || eventId;
+  const webUrl = `${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`;
   
-  return res.redirect(`${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`);
+  const appStoreUrl = iOS_APP_STORE_ID 
+    ? `https://apps.apple.com/app/id${iOS_APP_STORE_ID}?pt=event&id=${eventId}`
+    : 'https://apps.apple.com';
+  const playStoreUrl = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_NAME}&referrer=event_${eventId}`;
+
+  // Serve HTML page - Universal Links will intercept if app is installed
+  // If not installed, show download options
+  if (device.isIOS) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${event.name} - Mehfil</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="apple-itunes-app" content="app-id=${iOS_APP_STORE_ID || ''}">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+          }
+          .container {
+            max-width: 400px;
+          }
+          h1 {
+            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
+          }
+          p {
+            margin: 0.5rem 0;
+            opacity: 0.9;
+          }
+          .button {
+            display: inline-block;
+            margin: 1rem 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+          }
+          .button:hover {
+            opacity: 0.9;
+          }
+          .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="spinner"></div>
+          <h1>Opening in app...</h1>
+          <p>If the app doesn't open, download it from the App Store.</p>
+          <a href="${appStoreUrl}" class="button">Download App</a>
+          <a href="${webUrl}" class="button">View on Web</a>
+        </div>
+        <script>
+          // Universal Link will be intercepted by iOS if app is installed
+          // This page is only shown if app is not installed
+        </script>
+      </body>
+      </html>
+    `);
+  } else if (device.isAndroid) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${event.name} - Mehfil</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+          }
+          .container {
+            max-width: 400px;
+          }
+          h1 {
+            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
+          }
+          p {
+            margin: 0.5rem 0;
+            opacity: 0.9;
+          }
+          .button {
+            display: inline-block;
+            margin: 1rem 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+          }
+          .button:hover {
+            opacity: 0.9;
+          }
+          .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="spinner"></div>
+          <h1>Opening in app...</h1>
+          <p>If the app doesn't open, download it from the Play Store.</p>
+          <a href="${playStoreUrl}" class="button">Download App</a>
+          <a href="${webUrl}" class="button">View on Web</a>
+        </div>
+        <script>
+          // App Link will be intercepted by Android if app is installed
+          // This page is only shown if app is not installed
+        </script>
+      </body>
+      </html>
+    `);
+  } else {
+    // Desktop/web - redirect to web version
+    return res.redirect(webUrl);
+  }
 });
 
 /**
