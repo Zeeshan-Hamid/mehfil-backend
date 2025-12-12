@@ -112,10 +112,23 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
 
   // Smart redirect based on device
   if (device.isMobile) {
-    // For mobile (iOS/Android), redirect to Universal Link path
-    // Universal Links/App Links will handle opening the app
-    // If app not installed, /app/event/:id will serve a fallback page
-    return res.redirect(universalLink);
+    // For mobile, serve HTML that immediately redirects to Universal Link
+    // This allows iOS/Android to auto-open the app without showing banner
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta http-equiv="refresh" content="0;url=${universalLink}">
+        <script>
+          window.location.href = '${universalLink}';
+        </script>
+      </head>
+      <body>
+        <p>Opening app...</p>
+      </body>
+      </html>
+    `);
   } else {
     // Web/Desktop - redirect to web version
     return res.redirect(webUrl);
