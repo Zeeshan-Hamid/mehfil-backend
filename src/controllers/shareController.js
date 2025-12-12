@@ -187,7 +187,7 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
             min-height: 100vh;
             margin: 0;
             padding: 2rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #AF8EBA 0%, #C4A8D0 100%);
             color: white;
             text-align: center;
           }
@@ -207,7 +207,7 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
             margin: 1rem 0.5rem;
             padding: 0.75rem 1.5rem;
             background: white;
-            color: #667eea;
+            color: #AF8EBA;
             text-decoration: none;
             border-radius: 8px;
             font-weight: 600;
@@ -263,7 +263,7 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
             min-height: 100vh;
             margin: 0;
             padding: 2rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #AF8EBA 0%, #C4A8D0 100%);
             color: white;
             text-align: center;
           }
@@ -283,7 +283,7 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
             margin: 1rem 0.5rem;
             padding: 0.75rem 1.5rem;
             background: white;
-            color: #667eea;
+            color: #AF8EBA;
             text-decoration: none;
             border-radius: 8px;
             font-weight: 600;
