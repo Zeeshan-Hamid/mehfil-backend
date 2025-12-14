@@ -266,9 +266,6 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
           <p class="arrow-text">Tap "Open" above to go to app</p>
         </div>
         <div class="container">
-          <div class="spinner"></div>
-          <h1>Opening in app...</h1>
-          <p>If the app doesn't open automatically, tap "Open" at the top of the screen.</p>
           <a href="${appStoreUrl}" class="button">Download App</a>
           <a href="${webUrl}" class="button">View on Web</a>
         </div>
