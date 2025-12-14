@@ -1128,19 +1128,31 @@ router.post('/google/mobile/exchange-code', detectPlatform, async (req, res) => 
     
     const androidClientSecret = process.env.GOOGLE_ANDROID_CLIENT_SECRET || 
                                process.env.GOOGLE_MOBILE_CLIENT_SECRET || 
-                               null; // Android clients may not have a secret
+                               null;
+
+    // Log the request for debugging (remove sensitive data in production)
+    console.log('🔄 Google token exchange request:', {
+      code: code.substring(0, 20) + '...',
+      client_id: androidClientId,
+      redirect_uri: redirectUri, // Should be: "com.moneebb.mehfilappfrontend:/oauthredirect"
+      has_code_verifier: !!codeVerifier,
+      code_verifier_length: codeVerifier?.length,
+      grant_type: 'authorization_code',
+      has_client_secret: !!androidClientSecret,
+    });
 
     // Exchange authorization code for tokens
     const tokenUrl = 'https://oauth2.googleapis.com/token';
-    const tokenParams = new URLSearchParams({
-      code: code,
-      client_id: androidClientId,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-      code_verifier: codeVerifier,
-    });
-
-    // Add client secret if available (some Android clients have it)
+    
+    // Build the request body - ensure redirect_uri is NOT URL-encoded
+    const tokenParams = new URLSearchParams();
+    tokenParams.append('code', code);
+    tokenParams.append('client_id', androidClientId);
+    tokenParams.append('redirect_uri', redirectUri); // Use exactly as received
+    tokenParams.append('grant_type', 'authorization_code');
+    tokenParams.append('code_verifier', codeVerifier);
+    
+    // Add client secret if available (some Android clients require it)
     if (androidClientSecret) {
       tokenParams.append('client_secret', androidClientSecret);
     }
@@ -1155,11 +1167,19 @@ router.post('/google/mobile/exchange-code', detectPlatform, async (req, res) => 
 
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.json().catch(() => ({}));
-      console.error('❌ Google token exchange failed:', errorData);
+      console.error('❌ Google token exchange failed:', {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+        error: errorData.error,
+        error_description: errorData.error_description,
+        request_redirect_uri: redirectUri,
+        request_client_id: androidClientId,
+      });
       return res.status(401).json({
         success: false,
         message: 'Failed to exchange authorization code for tokens',
         error: errorData.error || 'Token exchange failed',
+        error_description: errorData.error_description || 'Check server logs for details',
         details: process.env.NODE_ENV === 'development' ? errorData : undefined
       });
     }
