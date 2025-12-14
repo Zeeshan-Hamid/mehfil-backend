@@ -11,6 +11,7 @@ package-lock.json
 
 create*.js
 test*.js
+tests/
 
 
 # Environment variables
@@ -20,10 +21,12 @@ test*.js
 .env.test.local
 .env.production.local
 
+
 # Logs
 logs/
 *.log
 src/logs/
+
 
 # Runtime data
 pids/
@@ -31,8 +34,10 @@ pids/
 *.seed
 *.pid.lock
 
+
 # Coverage directory used by tools like istanbul
 coverage/
+
 
 # Uploads
 src/uploads/images/*
@@ -42,11 +47,13 @@ src/uploads/temp/*
 !src/uploads/documents/.gitkeep
 !src/uploads/temp/.gitkeep
 
+
 # IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
+
 
 # OS generated files
 .DS_Store
@@ -57,10 +64,14 @@ src/uploads/temp/*
 ehthumbs.db
 Thumbs.db
 
+
 # Build outputs
 dist/
 build/
 
+
 # Temporary files
 tmp/
-temp/ 
+temp/
+
+node_modules/

@@ -67,6 +67,7 @@
     "socket.io": "^4.8.1",
     "stripe": "^14.25.0",
     "tesseract.js": "^6.0.1",
+    "uuid": "^13.0.0",
     "zipcode-to-timezone": "^0.0.9",
     "zipcodes": "^8.0.0"
   }

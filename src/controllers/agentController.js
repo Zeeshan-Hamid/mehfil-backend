@@ -1,4 +1,5 @@
 const { processVendorChatStream } = require('../services/agentService');
+const { getOrCreateConversation } = require('../services/conversationService');
 
 /**
  * @desc    Process vendor chat message through AI agent with streaming
@@ -7,7 +8,7 @@ const { processVendorChatStream } = require('../services/agentService');
  */
 const vendorAgentChat = async (req, res) => {
     try {
-        const { message, conversationHistory } = req.body;
+        const { message, sessionId } = req.body;
 
         // Validate input
         if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -25,21 +26,22 @@ const vendorAgentChat = async (req, res) => {
             });
         }
 
-        // Validate conversation history if provided
-        if (conversationHistory && !Array.isArray(conversationHistory)) {
-            return res.status(400).json({
+        // Get vendor ID from authenticated user
+        const vendorId = req.user?._id || req.user?.id;
+
+        if (!vendorId) {
+            return res.status(401).json({
                 success: false,
-                message: 'Conversation history must be an array'
+                message: 'Authentication required'
             });
         }
 
-        // Limit conversation history to prevent token overflow
-        const limitedHistory = conversationHistory
-            ? conversationHistory.slice(-10) // Keep last 10 messages
-            : [];
+        // Get or create conversation session
+        const conversation = await getOrCreateConversation(vendorId, sessionId);
 
         // Process the message through the agent with streaming
-        await processVendorChatStream(message, limitedHistory, res);
+        // Pass conversation object and vendorId to service
+        await processVendorChatStream(message, conversation, res, vendorId);
 
     } catch (error) {
         console.error('Vendor agent chat error:', {
