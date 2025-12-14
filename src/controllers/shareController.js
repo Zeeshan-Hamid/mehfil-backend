@@ -98,7 +98,9 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
   const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.moneebb.mehfilappfrontend';
 
   // Universal Link and App Link paths
+  // Use universal route - frontend will auto-detect vendor/customer role
   const universalLink = `${baseUrl}/app/event/${eventId}`;
+  // Alternative vendor-specific route (if needed): `${baseUrl}/app/vendor/event/${eventId}`;
   const appStoreUrl = iOS_APP_STORE_ID 
     ? `https://apps.apple.com/app/id${iOS_APP_STORE_ID}?pt=event&id=${eventId}`
     : 'https://apps.apple.com'; // Fallback to App Store home if ID not configured
@@ -406,6 +408,8 @@ exports.serveAppleAppSiteAssociation = (req, res) => {
           paths: [
             "/app/event/*",
             "/app/listing/*",
+            "/app/vendor/event/*",
+            "/app/vendor/listing/*",
             "/share/event/*",
             "/share/listing/*"
           ]

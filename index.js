@@ -112,6 +112,8 @@ app.use('/share', shareRedirectRoutes);
 const { handleAppLinkLanding, serveAppleAppSiteAssociation } = require('./src/controllers/shareController');
 app.get('/app/event/:eventId', handleAppLinkLanding);
 app.get('/app/listing/:eventId', handleAppLinkLanding); // alias
+app.get('/app/vendor/event/:eventId', handleAppLinkLanding); // vendor-specific route
+app.get('/app/vendor/listing/:eventId', handleAppLinkLanding); // vendor-specific route alias
 
 // Apple App Site Association file (required for Universal Links)
 app.get('/.well-known/apple-app-site-association', serveAppleAppSiteAssociation);
