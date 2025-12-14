@@ -1328,7 +1328,7 @@ router.post('/google/mobile/exchange-code', detectPlatform, async (req, res) => 
         serviceAreas: [],
         hasHalalCert: false,
         halalCertification: {
-          status: 'not_submitted',
+          status: 'unverified', // Valid enum value: 'unverified' is the default
           certificateNumber: null,
           certificateFile: null,
           verifiedAt: null,

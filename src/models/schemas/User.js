@@ -20,7 +20,10 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: [true, "Password is required"],
+      required: function() {
+        // Password is only required for email-based authentication
+        return this.authProvider === 'email' || !this.authProvider;
+      },
       minlength: [8, "Password must be at least 8 characters"],
       select: false,
     },
