@@ -270,8 +270,21 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
           <a href="${webUrl}" class="button">View on Web</a>
         </div>
         <script>
-          // Universal Link will be intercepted by iOS if app is installed
-          // This page is only shown if app is not installed
+          // Try to open app via Universal Link
+          // If app is installed, iOS will intercept and open it
+          // If app is not installed, redirect to App Store after short delay
+          var startTime = Date.now();
+          var checkInterval = setInterval(function() {
+            // If page is still visible after 1 second, app likely didn't open
+            // Redirect to App Store
+            if (Date.now() - startTime > 1000) {
+              clearInterval(checkInterval);
+              window.location.href = '${appStoreUrl}';
+            }
+          }, 100);
+          
+          // Also try immediate navigation (iOS may intercept)
+          window.location.href = '${universalLink}';
         </script>
       </body>
       </html>
@@ -339,15 +352,25 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
       </head>
       <body>
         <div class="container">
-          <div class="spinner"></div>
-          <h1>Opening in app...</h1>
-          <p>If the app doesn't open, download it from the Play Store.</p>
           <a href="${playStoreUrl}" class="button">Download App</a>
           <a href="${webUrl}" class="button">View on Web</a>
         </div>
         <script>
-          // App Link will be intercepted by Android if app is installed
-          // This page is only shown if app is not installed
+          // Try to open app via App Link
+          // If app is installed, Android will intercept and open it
+          // If app is not installed, redirect to Play Store after short delay
+          var startTime = Date.now();
+          var checkInterval = setInterval(function() {
+            // If page is still visible after 1 second, app likely didn't open
+            // Redirect to Play Store
+            if (Date.now() - startTime > 1000) {
+              clearInterval(checkInterval);
+              window.location.href = '${playStoreUrl}';
+            }
+          }, 100);
+          
+          // Also try immediate navigation (Android may intercept)
+          window.location.href = '${universalLink}';
         </script>
       </body>
       </html>
