@@ -1099,6 +1099,275 @@ router.post('/google/mobile/exchange', detectPlatform, async (req, res) => {
 });
 
 // Mobile Google OAuth Token Verification (SECURE VERSION - 2025)
+// @route   POST /api/auth/google/mobile/exchange-code
+// @desc    Exchange Google authorization code for ID token (Android)
+// @access  Public
+router.post('/google/mobile/exchange-code', detectPlatform, async (req, res) => {
+  try {
+    const { code, redirectUri, codeVerifier, role } = req.body;
+    
+    if (!code || !redirectUri || !codeVerifier) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: code, redirectUri, and codeVerifier'
+      });
+    }
+
+    const userRole = role || 'customer'; // Default to customer if not specified
+    if (!['customer', 'vendor'].includes(userRole)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role. Must be customer or vendor'
+      });
+    }
+
+    // Get Android Client ID and Secret
+    const androidClientId = process.env.GOOGLE_ANDROID_CLIENT_ID || 
+                           process.env.GOOGLE_MOBILE_CLIENT_ID || 
+                           '581440564691-b3godco8pkpal1fddlj8vfdj2j72cl4d.apps.googleusercontent.com';
+    
+    const androidClientSecret = process.env.GOOGLE_ANDROID_CLIENT_SECRET || 
+                               process.env.GOOGLE_MOBILE_CLIENT_SECRET || 
+                               null; // Android clients may not have a secret
+
+    // Exchange authorization code for tokens
+    const tokenUrl = 'https://oauth2.googleapis.com/token';
+    const tokenParams = new URLSearchParams({
+      code: code,
+      client_id: androidClientId,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+      code_verifier: codeVerifier,
+    });
+
+    // Add client secret if available (some Android clients have it)
+    if (androidClientSecret) {
+      tokenParams.append('client_secret', androidClientSecret);
+    }
+
+    const tokenResponse = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: tokenParams.toString(),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.json().catch(() => ({}));
+      console.error('❌ Google token exchange failed:', errorData);
+      return res.status(401).json({
+        success: false,
+        message: 'Failed to exchange authorization code for tokens',
+        error: errorData.error || 'Token exchange failed',
+        details: process.env.NODE_ENV === 'development' ? errorData : undefined
+      });
+    }
+
+    const tokens = await tokenResponse.json();
+    const idToken = tokens.id_token;
+
+    if (!idToken) {
+      return res.status(401).json({
+        success: false,
+        message: 'No ID token received from Google'
+      });
+    }
+
+    // Verify the ID token (reuse existing verification logic)
+    const clientIds = getAllClientIds();
+    
+    if (clientIds.length === 0) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error: Google OAuth not properly configured'
+      });
+    }
+
+    const verificationResult = await verifyGoogleIdTokenMultiPlatform(idToken, clientIds);
+    
+    if (!verificationResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid Google ID token',
+        error: verificationResult.error,
+        details: verificationResult.details
+      });
+    }
+
+    const googleUser = verificationResult.data;
+    console.log('✅ Google Auth Success (Code Exchange):', {
+      email: googleUser.email,
+      role: userRole,
+      platform: 'android',
+    });
+
+    // Check if user already exists by Google ID
+    let existingUser = await User.findOne({ 'socialLogin.googleId': googleUser.googleId });
+    
+    if (existingUser) {
+      // User exists, log them in
+      const token = generateToken(existingUser._id);
+      
+      const userResponse = existingUser.toObject();
+      delete userResponse.password;
+      userResponse.profileCompleted = existingUser.role === 'customer' ? 
+        existingUser.customerProfile.profileCompleted : 
+        existingUser.vendorProfile.profileCompleted;
+      
+      return res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: userResponse,
+          token: token
+        }
+      });
+    }
+
+    // Check if user exists with this email
+    existingUser = await User.findOne({ email: googleUser.email });
+    
+    if (existingUser) {
+      console.log('👤 Existing user found by email - linking Google account');
+      // Link Google account to existing user
+      existingUser.socialLogin.googleId = googleUser.googleId;
+      existingUser.authProvider = 'google';
+      existingUser.emailVerified = googleUser.emailVerified;
+      await existingUser.save({ validateBeforeSave: false });
+      
+      const token = generateToken(existingUser._id);
+      const userResponse = existingUser.toObject();
+      delete userResponse.password;
+      userResponse.profileCompleted = existingUser.role === 'customer' ? 
+        existingUser.customerProfile.profileCompleted : 
+        existingUser.vendorProfile.profileCompleted;
+      
+      return res.json({
+        success: true,
+        message: 'Google account linked successfully',
+        data: {
+          user: userResponse,
+          token: token
+        }
+      });
+    }
+
+    // Create new user with VERIFIED Google data
+    const newUser = new User({
+      email: googleUser.email,
+      authProvider: 'google',
+      socialLogin: { googleId: googleUser.googleId },
+      role: userRole,
+      emailVerified: googleUser.emailVerified,
+      phoneNumber: null,
+    });
+
+    if (userRole === 'customer') {
+      newUser.customerProfile = {
+        fullName: googleUser.name || '',
+        gender: null,
+        location: {
+          city: null,
+          state: null,
+          country: null,
+          zipCode: null
+        },
+        profileImage: googleUser.picture || null,
+        preferences: {
+          categories: [],
+          budgetRange: null,
+          preferredLanguages: [],
+          genderPreference: null,
+          culturalPreferences: []
+        },
+        preferredVendors: [],
+        customerCart: [],
+        profileCompleted: false
+      };
+    }
+
+    if (userRole === 'vendor') {
+      newUser.vendorProfile = {
+        ownerName: googleUser.name || '',
+        businessName: null,
+        profileImage: googleUser.picture || null,
+        businessAddress: {
+          street: null,
+          city: null,
+          state: null,
+          zipCode: null,
+          country: null
+        },
+        timezone: null,
+        geo: { type: 'Point', coordinates: [0, 0] },
+        serviceDescription: null,
+        primaryServiceCategory: null,
+        serviceCategories: [],
+        experienceYears: null,
+        serviceAreas: [],
+        hasHalalCert: false,
+        halalCertification: {
+          status: 'not_submitted',
+          certificateNumber: null,
+          certificateFile: null,
+          verifiedAt: null,
+          verifiedBy: null
+        },
+        portfolio: {
+          images: [],
+          videos: [],
+          beforeAfterPhotos: []
+        },
+        availability: {
+          calendar: {},
+          workingDays: [],
+          workingHours: {},
+          bookingRules: {}
+        },
+        pricing: {
+          startingPrice: null,
+          maxPrice: null,
+          pricingType: null,
+          packageDeals: []
+        },
+        businessMetrics: {
+          rating: 0,
+          totalReviews: 0,
+          totalBookings: 0,
+          totalRevenue: 0,
+          verificationBadges: []
+        },
+        profileCompleted: false
+      };
+    }
+
+    await newUser.save();
+
+    const token = generateToken(newUser._id);
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
+    userResponse.profileCompleted = false;
+
+    return res.status(201).json({
+      success: true,
+      message: 'Account created successfully',
+      data: {
+        user: userResponse,
+        token: token
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Google code exchange error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error during Google authentication',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // @route   POST /api/auth/google/mobile/verify
 // @desc    Verify Google ID token from mobile app (iOS/Android)
 // @access  Public
