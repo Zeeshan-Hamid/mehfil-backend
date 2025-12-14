@@ -155,6 +155,9 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
   const iOS_APP_STORE_ID = process.env.IOS_APP_STORE_ID || '';
   const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.moneebb.mehfilappfrontend';
   
+  // Universal Link path
+  const universalLink = `${baseUrl}/app/event/${eventId}`;
+  
   // Use slug if available, otherwise use ID
   const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/vendor_listing_details';
   const eventIdentifier = event.slug || eventId;
