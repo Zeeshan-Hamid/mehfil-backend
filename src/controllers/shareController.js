@@ -112,23 +112,9 @@ exports.handleShareRedirect = catchAsync(async (req, res, next) => {
 
   // Smart redirect based on device
   if (device.isMobile) {
-    // For mobile, serve HTML that immediately redirects to Universal Link
-    // This allows iOS/Android to auto-open the app without showing banner
-    return res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta http-equiv="refresh" content="0;url=${universalLink}">
-        <script>
-          window.location.href = '${universalLink}';
-        </script>
-      </head>
-      <body>
-        <p>Opening app...</p>
-      </body>
-      </html>
-    `);
+    // For mobile, use server-side 302 redirect directly to Universal Link
+    // This is the most reliable way for iOS/Android to auto-open the app
+    return res.redirect(302, universalLink);
   } else {
     // Web/Desktop - redirect to web version
     return res.redirect(webUrl);
@@ -241,13 +227,48 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
+          .arrow-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            text-align: center;
+            background: rgba(175, 142, 186, 0.95);
+            z-index: 1000;
+            animation: pulse 2s ease-in-out infinite;
+          }
+          .arrow-up {
+            font-size: 2rem;
+            color: white;
+            margin-bottom: 0.5rem;
+            animation: bounce 1s ease-in-out infinite;
+          }
+          .arrow-text {
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: white;
+          }
+          @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+          }
         </style>
       </head>
       <body>
+        <div class="arrow-container">
+          <div class="arrow-up">↑</div>
+          <p class="arrow-text">Tap "Open" above to go to app</p>
+        </div>
         <div class="container">
           <div class="spinner"></div>
           <h1>Opening in app...</h1>
-          <p>If the app doesn't open, download it from the App Store.</p>
+          <p>If the app doesn't open automatically, tap "Open" at the top of the screen.</p>
           <a href="${appStoreUrl}" class="button">Download App</a>
           <a href="${webUrl}" class="button">View on Web</a>
         </div>
