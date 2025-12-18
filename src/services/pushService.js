@@ -8,7 +8,13 @@ async function sendExpoPushNotification(tokens, notification) {
   const tokenArray = Array.isArray(tokens) ? tokens : [tokens];
   const validTokens = tokenArray.filter(isExpoPushToken);
 
-  if (validTokens.length === 0) return;
+  if (validTokens.length === 0) {
+    console.warn('[PushService] No valid Expo tokens; skipping send', {
+      rawTokensCount: tokenArray.length,
+      rawTokens: tokenArray,
+    });
+    return;
+  }
 
   const messages = validTokens.map((to) => ({
     to,
@@ -21,6 +27,11 @@ async function sendExpoPushNotification(tokens, notification) {
   // Use global fetch if available (Node 18+), otherwise lazy-require node-fetch
   const fetchFn =
     typeof fetch === 'function' ? fetch : (await import('node-fetch')).default;
+
+  console.log('[PushService] Sending Expo push request', {
+    url: EXPO_PUSH_URL,
+    messagesCount: messages.length,
+  });
 
   const response = await fetchFn(EXPO_PUSH_URL, {
     method: 'POST',
@@ -40,9 +51,14 @@ async function sendExpoPushNotification(tokens, notification) {
   }
 
   if (!response.ok) {
-    console.error('Expo push request failed', {
+    console.error('[PushService] Expo push request failed', {
       status: response.status,
       statusText: response.statusText,
+      body: json,
+    });
+  } else {
+    console.log('[PushService] Expo push request succeeded', {
+      status: response.status,
       body: json,
     });
   }
