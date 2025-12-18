@@ -146,13 +146,28 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
     title: notification.title,
   });
 
-  // Fire-and-forget push notification
+  // Fire-and-forget push notification (properly handle async promise)
   try {
     const { sendPushForNotification } = require('../services/notificationPushService');
-    console.log('🔔 Calling sendPushForNotification for message notification');
-    sendPushForNotification(notification);
+    console.log('🔔 [NOTIFICATION TRIGGER] Calling sendPushForNotification for message notification', {
+      notificationId: notification._id,
+      recipientId: notification.recipient,
+      type: notification.type
+    });
+    // Fire and forget, but handle promise rejection properly
+    sendPushForNotification(notification).catch(err => {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to send push for message notification (async error)', {
+        notificationId: notification._id,
+        error: err.message,
+        stack: err.stack
+      });
+    });
   } catch (e) {
-    console.error('Failed to trigger push for message notification', e);
+    console.error('❌ [NOTIFICATION TRIGGER] Failed to trigger push for message notification (sync error)', {
+      notificationId: notification._id,
+      error: e.message,
+      stack: e.stack
+    });
   }
 
   
@@ -220,13 +235,28 @@ notificationSchema.statics.createCartNotification = async function(cartData) {
     title: notification.title,
   });
 
-  // Fire-and-forget push notification
+  // Fire-and-forget push notification (properly handle async promise)
   try {
     const { sendPushForNotification } = require('../services/notificationPushService');
-    console.log('🔔 Calling sendPushForNotification for cart-added notification');
-    sendPushForNotification(notification);
+    console.log('🔔 [NOTIFICATION TRIGGER] Calling sendPushForNotification for cart-added notification', {
+      notificationId: notification._id,
+      recipientId: notification.recipient,
+      type: notification.type
+    });
+    // Fire and forget, but handle promise rejection properly
+    sendPushForNotification(notification).catch(err => {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to send push for cart-added notification (async error)', {
+        notificationId: notification._id,
+        error: err.message,
+        stack: err.stack
+      });
+    });
   } catch (e) {
-    console.error('Failed to trigger push for cart-added notification', e);
+    console.error('❌ [NOTIFICATION TRIGGER] Failed to trigger push for cart-added notification (sync error)', {
+      notificationId: notification._id,
+      error: e.message,
+      stack: e.stack
+    });
   }
   
   return notification;
@@ -292,13 +322,28 @@ notificationSchema.statics.createCartRemovalNotification = async function(cartDa
     title: notification.title,
   });
 
-  // Fire-and-forget push notification
+  // Fire-and-forget push notification (properly handle async promise)
   try {
     const { sendPushForNotification } = require('../services/notificationPushService');
-    console.log('🔔 Calling sendPushForNotification for cart-removed notification');
-    sendPushForNotification(notification);
+    console.log('🔔 [NOTIFICATION TRIGGER] Calling sendPushForNotification for cart-removed notification', {
+      notificationId: notification._id,
+      recipientId: notification.recipient,
+      type: notification.type
+    });
+    // Fire and forget, but handle promise rejection properly
+    sendPushForNotification(notification).catch(err => {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to send push for cart-removed notification (async error)', {
+        notificationId: notification._id,
+        error: err.message,
+        stack: err.stack
+      });
+    });
   } catch (e) {
-    console.error('Failed to trigger push for cart-removed notification', e);
+    console.error('❌ [NOTIFICATION TRIGGER] Failed to trigger push for cart-removed notification (sync error)', {
+      notificationId: notification._id,
+      error: e.message,
+      stack: e.stack
+    });
   }
   
   return notification;

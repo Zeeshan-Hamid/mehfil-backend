@@ -392,24 +392,44 @@ exports.sendMessage = catchAsync(async (req, res) => {
 
         // Create notification for the receiver
         try {
+            console.log('🔔 [NOTIFICATION TRIGGER] Creating message notification', {
+                senderId,
+                receiverId,
+                messageId: newMessage._id,
+                conversationId: newMessage.conversationId
+            });
+            
             const notification = await Notification.createMessageNotification({
                 sender: senderId,
                 receiver: receiverId,
                 message: newMessage
             });
             
-            
+            console.log('✅ [NOTIFICATION TRIGGER] Message notification created successfully', {
+                notificationId: notification._id,
+                recipientId: notification.recipient
+            });
             
             if (socketService) {
-                
+                console.log('📡 [NOTIFICATION TRIGGER] Broadcasting message and notification via Socket.IO', {
+                    messageId: newMessage._id,
+                    notificationId: notification._id
+                });
                 socketService.broadcastMessage(newMessage);
                 socketService.broadcastNotification(notification);
                 socketService.sendUnreadCountUpdate(receiverId); // Ensure receiver gets unread count update
             } else {
-                
+                console.warn('⚠️ [NOTIFICATION TRIGGER] Socket service not available, skipping Socket.IO broadcast');
             }
         } catch (notificationError) {
             // Error creating notification
+            console.error('❌ [NOTIFICATION TRIGGER] Failed to create message notification', {
+                senderId,
+                receiverId,
+                messageId: newMessage._id,
+                error: notificationError.message,
+                stack: notificationError.stack
+            });
             // Still broadcast the message even if notification fails
             if (socketService) {
                 socketService.broadcastMessage(newMessage);

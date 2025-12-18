@@ -159,7 +159,12 @@ class SocketService {
         } catch (_) {}
       }
 
-     
+      console.log('🔔 [NOTIFICATION TRIGGER] Creating message notification via Socket.IO', {
+        senderId: socket.userId,
+        receiverId,
+        messageId: newMessage._id,
+        conversationId: newMessage.conversationId
+      });
       
       let notification = null;
       try {
@@ -169,11 +174,20 @@ class SocketService {
           message: newMessage
         });
         
-       
+        console.log('✅ [NOTIFICATION TRIGGER] Message notification created successfully via Socket.IO', {
+          notificationId: notification._id,
+          recipientId: notification.recipient
+        });
         
       } catch (notificationError) {
         // Error creating notification
-        
+        console.error('❌ [NOTIFICATION TRIGGER] Failed to create message notification via Socket.IO', {
+          senderId: socket.userId,
+          receiverId,
+          messageId: newMessage._id,
+          error: notificationError.message,
+          stack: notificationError.stack
+        });
       }
 
 
@@ -181,7 +195,9 @@ class SocketService {
       
       // Finally broadcast notification if it was created successfully
       if (notification) {
-       
+        console.log('📡 [NOTIFICATION TRIGGER] Broadcasting notification via Socket.IO', {
+          notificationId: notification._id
+        });
         this.broadcastNotification(notification);
         this.sendUnreadCountUpdate(receiverId);
       }
