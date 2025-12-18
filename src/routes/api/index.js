@@ -27,6 +27,7 @@ const taxRoutes = require('./taxRoutes');
 const blogRoutes = require('./blogRoutes');
 const marketplaceRoutes = require('./marketplaceRoutes');
 const shareRoutes = require('./shareRoutes');
+const userRoutes = require('./userRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -70,5 +71,6 @@ router.use('/tax', taxRoutes);
 router.use('/blogs', blogRoutes);
 router.use('/marketplace', marketplaceRoutes);
 router.use('/', shareRoutes);
+router.use('/users', userRoutes);
 
 module.exports = router; 
