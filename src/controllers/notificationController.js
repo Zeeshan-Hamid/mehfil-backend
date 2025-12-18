@@ -258,10 +258,18 @@ exports.createNotification = catchAsync(async (req, res) => {
       priority: priority || 'medium'
     });
     
+    console.log('📬 Notification created:', {
+      id: notification._id,
+      recipient: notification.recipient,
+      type: notification.type,
+      title: notification.title,
+    });
+    
     await notification.populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
     // Fire-and-forget mobile push
     try {
       const { sendPushForNotification } = require('../services/notificationPushService');
+      console.log('🔔 Calling sendPushForNotification for created notification');
       sendPushForNotification(notification);
     } catch (e) {
       console.error('Failed to trigger push for created notification', e);

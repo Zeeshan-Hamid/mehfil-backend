@@ -139,9 +139,17 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
 
   const notification = await this.create(notificationData);
 
+  console.log('📬 Notification created:', {
+    id: notification._id,
+    recipient: notification.recipient,
+    type: notification.type,
+    title: notification.title,
+  });
+
   // Fire-and-forget push notification
   try {
     const { sendPushForNotification } = require('../services/notificationPushService');
+    console.log('🔔 Calling sendPushForNotification for message notification');
     sendPushForNotification(notification);
   } catch (e) {
     console.error('Failed to trigger push for message notification', e);
@@ -205,9 +213,17 @@ notificationSchema.statics.createCartNotification = async function(cartData) {
   
   const notification = await this.create(notificationData);
 
+  console.log('📬 Notification created:', {
+    id: notification._id,
+    recipient: notification.recipient,
+    type: notification.type,
+    title: notification.title,
+  });
+
   // Fire-and-forget push notification
   try {
     const { sendPushForNotification } = require('../services/notificationPushService');
+    console.log('🔔 Calling sendPushForNotification for cart-added notification');
     sendPushForNotification(notification);
   } catch (e) {
     console.error('Failed to trigger push for cart-added notification', e);
@@ -269,9 +285,17 @@ notificationSchema.statics.createCartRemovalNotification = async function(cartDa
   
   const notification = await this.create(notificationData);
 
+  console.log('📬 Notification created:', {
+    id: notification._id,
+    recipient: notification.recipient,
+    type: notification.type,
+    title: notification.title,
+  });
+
   // Fire-and-forget push notification
   try {
     const { sendPushForNotification } = require('../services/notificationPushService');
+    console.log('🔔 Calling sendPushForNotification for cart-removed notification');
     sendPushForNotification(notification);
   } catch (e) {
     console.error('Failed to trigger push for cart-removed notification', e);
