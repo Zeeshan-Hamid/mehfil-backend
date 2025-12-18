@@ -2,17 +2,31 @@ const User = require('../models/User');
 const { sendExpoPushNotification } = require('./pushService');
 
 async function sendPushForNotification(notification) {
+  console.log('🚀 [EXPO PUSH] sendPushForNotification called', {
+    notificationId: notification?._id,
+    recipientId: notification?.recipient,
+    type: notification?.type,
+    title: notification?.title
+  });
+
   try {
     if (!notification || !notification.recipient) {
-      console.warn('[NotificationPush] Notification or recipient missing', {
+      console.warn('⚠️ [EXPO PUSH] Notification or recipient missing', {
         notificationId: notification && notification._id,
+        hasNotification: !!notification,
+        hasRecipient: !!(notification && notification.recipient),
       });
       return;
     }
 
+    console.log('🔍 [EXPO PUSH] Loading recipient user from database', {
+      notificationId: notification._id,
+      recipientId: notification.recipient
+    });
+
     const user = await User.findById(notification.recipient).select('expoPushTokens');
 
-    console.log('[NotificationPush] Loaded recipient for notification', {
+    console.log('✅ [EXPO PUSH] Loaded recipient for notification', {
       notificationId: notification._id,
       recipientId: notification.recipient,
       hasUser: !!user,
@@ -21,8 +35,10 @@ async function sendPushForNotification(notification) {
     });
 
     if (!user || !user.expoPushTokens || user.expoPushTokens.length === 0) {
-      console.warn('[NotificationPush] No Expo tokens for recipient; skipping push', {
+      console.warn('⚠️ [EXPO PUSH] No Expo tokens for recipient; skipping push', {
         recipientId: notification.recipient,
+        hasUser: !!user,
+        expoPushTokensCount: user?.expoPushTokens?.length || 0,
       });
       return;
     }
@@ -37,21 +53,32 @@ async function sendPushForNotification(notification) {
       },
     };
 
-    console.log('[NotificationPush] Sending Expo push notification', {
+    console.log('📤 [EXPO PUSH] Sending Expo push notification to Expo API', {
       recipientId: notification.recipient,
       notificationId: notification._id,
       title: payload.title,
       message: payload.message,
       expoPushTokensCount: user.expoPushTokens.length,
+      expoPushTokens: user.expoPushTokens,
     });
 
-    await sendExpoPushNotification(user.expoPushTokens, payload);
+    const result = await sendExpoPushNotification(user.expoPushTokens, payload);
+    
+    console.log('✅ [EXPO PUSH] Expo push notification sent successfully', {
+      notificationId: notification._id,
+      recipientId: notification.recipient,
+      result: result
+    });
+
+    return result;
   } catch (err) {
-    console.error(
-      'Failed to send push for notification',
-      notification && notification._id,
-      err
-    );
+    console.error('❌ [EXPO PUSH] Failed to send push for notification', {
+      notificationId: notification && notification._id,
+      recipientId: notification?.recipient,
+      error: err.message,
+      stack: err.stack
+    });
+    throw err; // Re-throw so caller can handle it
   }
 }
 
