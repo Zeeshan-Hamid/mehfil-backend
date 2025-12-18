@@ -139,6 +139,14 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
 
   const notification = await this.create(notificationData);
 
+  // Fire-and-forget push notification
+  try {
+    const { sendPushForNotification } = require('../services/notificationPushService');
+    sendPushForNotification(notification);
+  } catch (e) {
+    console.error('Failed to trigger push for message notification', e);
+  }
+
   
 
   return notification;
@@ -196,6 +204,14 @@ notificationSchema.statics.createCartNotification = async function(cartData) {
   };
   
   const notification = await this.create(notificationData);
+
+  // Fire-and-forget push notification
+  try {
+    const { sendPushForNotification } = require('../services/notificationPushService');
+    sendPushForNotification(notification);
+  } catch (e) {
+    console.error('Failed to trigger push for cart-added notification', e);
+  }
   
   return notification;
 };
@@ -252,6 +268,14 @@ notificationSchema.statics.createCartRemovalNotification = async function(cartDa
   };
   
   const notification = await this.create(notificationData);
+
+  // Fire-and-forget push notification
+  try {
+    const { sendPushForNotification } = require('../services/notificationPushService');
+    sendPushForNotification(notification);
+  } catch (e) {
+    console.error('Failed to trigger push for cart-removed notification', e);
+  }
   
   return notification;
 };

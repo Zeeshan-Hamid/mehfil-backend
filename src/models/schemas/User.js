@@ -74,6 +74,12 @@ const userSchema = new mongoose.Schema(
       },
     },
 
+    // Push notification tokens (Expo)
+    expoPushTokens: {
+      type: [String],
+      default: [],
+    },
+
     isActive: {
       type: Boolean,
       default: true,
