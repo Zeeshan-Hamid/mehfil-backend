@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 exports.getCartCount = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -53,7 +53,7 @@ exports.getCart = async (req, res) => {
           error: 'Event no longer exists.'
         };
       }
-      
+
       let eventPackage;
       if (item.packageType === 'flatPrice') {
         // For flat price items, create a package object from flat price data
@@ -69,7 +69,7 @@ exports.getCart = async (req, res) => {
         const customPackages = item.event.customPackages || [];
         eventPackage = customPackages.find(pkg => pkg._id.toString() === item.package.toString()) || null;
       }
-      
+
       return {
         _id: item._id,
         event: {
@@ -121,7 +121,7 @@ exports.addToCart = async (req, res) => {
 
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
@@ -140,19 +140,19 @@ exports.addToCart = async (req, res) => {
     user.customerProfile.customerCart = user.customerProfile.customerCart.filter(item => {
       // Check if all required fields exist
       const hasRequiredFields = item.eventTime && item.eventDate && item.attendees && item.totalPrice !== undefined;
-      
+
       // Check if eventTime is in the correct format (HH:MM AM/PM)
       const isValidEventTimeFormat = item.eventTime && /^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i.test(item.eventTime);
-      
+
       const isValid = hasRequiredFields && isValidEventTimeFormat;
-      
+
       return isValid;
     });
-    
+
     // Handle both ObjectId and slug for event lookup
     let event = null;
     const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
-    
+
     if (isValidObjectId) {
       // If it's a valid ObjectId, search by ID
       event = await Event.findById(eventId);
@@ -166,7 +166,7 @@ exports.addToCart = async (req, res) => {
     }
 
     let eventPackage;
-    
+
     if (packageType === 'flatPrice') {
       // For flat price, check if the event has an active flat price
       if (!event.flatPrice || !event.flatPrice.isActive) {
@@ -180,8 +180,8 @@ exports.addToCart = async (req, res) => {
       }
     } else {
       // For custom packages, check if it exists and is created for this customer
-      eventPackage = event.customPackages.find(pkg => 
-        pkg._id.toString() === packageId && 
+      eventPackage = event.customPackages.find(pkg =>
+        pkg._id.toString() === packageId &&
         pkg.createdFor.toString() === req.user.id &&
         pkg.isActive
       );
@@ -189,28 +189,28 @@ exports.addToCart = async (req, res) => {
         return res.status(404).json({ success: false, message: 'Custom package not found or not available for you.' });
       }
     }
-    
+
     // Check if the same event and package is already in the cart
     let itemExists;
     if (packageType === 'flatPrice') {
       // For flat price, check if the same event with flat price is already in cart
-      itemExists = user.customerProfile.customerCart.some(item => 
+      itemExists = user.customerProfile.customerCart.some(item =>
         item.event.equals(event._id) && item.packageType === 'flatPrice'
       );
     } else if (eventPackage.pricingMode === 'flatPrice') {
       // For flat price custom packages, check if the same custom package is already in cart
       // Allow different flat price custom packages for the same event
-      itemExists = user.customerProfile.customerCart.some(item => 
+      itemExists = user.customerProfile.customerCart.some(item =>
         item.event.equals(event._id) && item.packageType === packageType && item.package && item.package.equals(packageId)
       );
     } else {
-      itemExists = user.customerProfile.customerCart.some(item => 
+      itemExists = user.customerProfile.customerCart.some(item =>
         item.event.equals(event._id) && item.packageType === packageType && item.package && item.package.equals(packageId)
       );
     }
 
     if (itemExists) {
-        return res.status(409).json({ success: false, message: 'This item is already in your cart. You can update it from the cart page.' });
+      return res.status(409).json({ success: false, message: 'Listing is already in the cart' });
     }
 
     // Compute total price based on package type and pricing mode
@@ -280,9 +280,9 @@ exports.addToCart = async (req, res) => {
         attendees: (packageType === 'flatPrice' || eventPackage.pricingMode === 'flatPrice') ? 1 : attendees,
         totalPrice: computedTotalPrice
       };
-      
+
       const notification = await Notification.createCartNotification(cartData);
-      
+
       // Broadcast notification via socket if available
       const socketService = req.app.get('socketService');
       if (socketService) {
@@ -319,7 +319,7 @@ exports.addToCart = async (req, res) => {
 exports.updateCartItem = async (req, res) => {
   const { cartItemId } = req.params;
   const { packageId, eventDate, eventTime, attendees, totalPrice } = req.body;
-  
+
   try {
     const user = await User.findById(req.user.id);
     const cartItem = user.customerProfile.customerCart.id(cartItemId);
@@ -344,13 +344,13 @@ exports.updateCartItem = async (req, res) => {
     if (totalPrice !== undefined) cartItem.totalPrice = totalPrice;
 
     await user.save();
-    
+
     res.status(200).json({
-        success: true,
-        message: 'Cart item updated successfully.',
-        data: {
-          cart: user.customerProfile.customerCart
-        }
+      success: true,
+      message: 'Cart item updated successfully.',
+      data: {
+        cart: user.customerProfile.customerCart
+      }
     });
 
   } catch (error) {
@@ -373,13 +373,13 @@ exports.removeFromCart = async (req, res) => {
     // Find the cart item before removing it to get details for notification
     const cartItem = cart.id(cartItemId);
     if (!cartItem) {
-        return res.status(404).json({ success: false, message: 'Cart item not found.' });
+      return res.status(404).json({ success: false, message: 'Cart item not found.' });
     }
 
     // Get event details for notification
     const event = await Event.findById(cartItem.event).select('name vendor imageUrls');
     if (!event) {
-        return res.status(404).json({ success: false, message: 'Event not found.' });
+      return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
     // Use the .pull() method which is the correct way to remove a subdocument
@@ -387,7 +387,7 @@ exports.removeFromCart = async (req, res) => {
 
     // Check if an item was actually removed
     if (cart.length === initialLength) {
-        return res.status(404).json({ success: false, message: 'Cart item not found.' });
+      return res.status(404).json({ success: false, message: 'Cart item not found.' });
     }
 
     await user.save();
@@ -404,9 +404,9 @@ exports.removeFromCart = async (req, res) => {
         attendees: cartItem.attendees,
         totalPrice: cartItem.totalPrice
       };
-      
+
       const notification = await Notification.createCartRemovalNotification(cartData);
-      
+
       // Broadcast notification via socket if available
       const socketService = req.app.get('socketService');
       if (socketService) {
@@ -418,8 +418,8 @@ exports.removeFromCart = async (req, res) => {
     }
 
     res.status(200).json({
-        success: true,
-        message: 'Item removed from cart successfully.'
+      success: true,
+      message: 'Item removed from cart successfully.'
     });
 
   } catch (error) {

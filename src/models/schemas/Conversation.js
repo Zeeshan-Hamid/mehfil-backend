@@ -8,7 +8,8 @@ const messageSchema = new mongoose.Schema({
     },
     content: {
         type: String,
-        required: true
+        required: false,
+        default: ''
     },
     timestamp: {
         type: Date,
@@ -90,18 +91,25 @@ conversationSchema.methods.addMessage = function (role, content, toolCalls = nul
     this.metadata.totalMessages = this.messages.length;
     this.lastActivity = new Date();
 
-    // Keep only last 15 messages for context window efficiency
-    if (this.messages.length > 15) {
-        this.messages = this.messages.slice(-15);
+    // Keep only last 25 messages for context window efficiency
+    // Increased from 15 to allow more tool-use rounds
+    if (this.messages.length > 25) {
+        this.messages = this.messages.slice(-25);
+
+        // Ensure we don't start with a 'tool' message which would break OpenAI API
+        // Starting with 'user' is the safest for both API rules and model context
+        while (this.messages.length > 0 && this.messages[0].role !== 'user') {
+            this.messages.shift();
+        }
     }
 };
 
 // Method to get formatted messages for OpenAI
 conversationSchema.methods.getFormattedMessages = function () {
-    return this.messages.map(msg => {
+    let formattedMessages = this.messages.map(msg => {
         const formatted = {
             role: msg.role,
-            content: msg.content
+            content: msg.content || ""
         };
 
         if (msg.toolCalls && msg.toolCalls.length > 0) {
@@ -114,6 +122,17 @@ conversationSchema.methods.getFormattedMessages = function () {
 
         return formatted;
     });
+
+    // CRITICAL FIX: Ensure history doesn't start with a 'tool' message
+    // OpenAI requires 'tool' messages to follow an 'assistant' message with 'tool_calls'
+    // Starting with 'user' is the most robust way to ensure valid sequences and clean context
+    while (formattedMessages.length > 0 &&
+        formattedMessages[0].role !== 'user' &&
+        formattedMessages[0].role !== 'system') {
+        formattedMessages.shift();
+    }
+
+    return formattedMessages;
 };
 
 // Static method to clean expired conversations

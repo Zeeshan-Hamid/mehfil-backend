@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect, restrictTo } = require('../../middleware/authMiddleware');
 const { getVendorReviews } = require('../../controllers/reviewController');
 const { getCurrentVendorProfile, updateVendorGeneralProfile } = require('../../controllers/vendorController');
+const { getAvailability, updateAvailability } = require('../../controllers/availabilityController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 const { validateVendorGeneralProfile } = require('../../validators/vendorValidators');
 
@@ -21,4 +22,8 @@ router.put('/profile/general', uploadInMemory.fields([
 // GET /api/vendor/reviews - Fetches all reviews for the logged-in vendor
 router.get('/reviews', getVendorReviews);
 
-module.exports = router; 
+// Availability Routes
+router.get('/availability/:year/:month', getAvailability);
+router.post('/availability', updateAvailability);
+
+module.exports = router;
