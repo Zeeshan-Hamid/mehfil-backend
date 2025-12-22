@@ -820,10 +820,7 @@ const getVendorListingDetails = async (vendorId, listingName) => {
             servicesOffered,
             reviews,
             completeness,
-            suggestions,
-            profileCompleteness: Math.round(
-                (Object.values(completeness).filter(v => v).length / Object.keys(completeness).length) * 100
-            )
+            suggestions
         };
 
     } catch (error) {
@@ -1019,6 +1016,203 @@ const auditVendorListings = async (vendorId) => {
     }
 };
 
+/**
+ * Update a vendor's listing with new information
+ * @param {string} vendorId - The vendor's user ID
+ * @param {string} listingName - The current name of the listing to update
+ * @param {Object} updateData - Object containing fields to update (name, description, etc.)
+ * @returns {Promise<Object>} Result of the update operation
+ */
+const updateVendorListing = async (vendorId, listingName, updateData) => {
+    try {
+        // Only allow certain fields to be updated for safety
+        const allowedSetFields = ['name', 'description', 'category', 'services', 'offerings', 'flatPrice'];
+
+        const updateOperation = {};
+        const updatedFields = [];
+
+        // Handle direct sets
+        const setUpdate = {};
+        allowedSetFields.forEach(field => {
+            if (updateData[field] !== undefined) {
+                setUpdate[field] = updateData[field];
+                updatedFields.push(field);
+            }
+        });
+        if (Object.keys(setUpdate).length > 0) updateOperation.$set = setUpdate;
+
+        // Handle additions (atomic)
+        const addToSetUpdate = {};
+        if (updateData.addOfferings) {
+            addToSetUpdate.offerings = { $each: Array.isArray(updateData.addOfferings) ? updateData.addOfferings : [updateData.addOfferings] };
+            updatedFields.push('offerings (added)');
+        }
+        if (updateData.addServices) {
+            addToSetUpdate.services = { $each: Array.isArray(updateData.addServices) ? updateData.addServices : [updateData.addServices] };
+            updatedFields.push('services (added)');
+        }
+        if (Object.keys(addToSetUpdate).length > 0) updateOperation.$addToSet = addToSetUpdate;
+
+        // Handle removals (atomic)
+        const pullUpdate = {};
+        if (updateData.removeOfferings) {
+            pullUpdate.offerings = { $in: Array.isArray(updateData.removeOfferings) ? updateData.removeOfferings : [updateData.removeOfferings] };
+            updatedFields.push('offerings (removed)');
+        }
+        if (updateData.removeServices) {
+            pullUpdate.services = { $in: Array.isArray(updateData.removeServices) ? updateData.removeServices : [updateData.removeServices] };
+            updatedFields.push('services (removed)');
+        }
+        if (Object.keys(pullUpdate).length > 0) updateOperation.$pull = pullUpdate;
+
+        // Handle Package Management
+        if (updateData.addPackage) {
+            updateOperation.$push = updateOperation.$push || {};
+            updateOperation.$push.packages = updateData.addPackage;
+            updatedFields.push('package (added)');
+        }
+
+        if (updateData.removePackageByName) {
+            updateOperation.$pull = updateOperation.$pull || {};
+            updateOperation.$pull.packages = { name: new RegExp(`^${updateData.removePackageByName}$`, 'i') };
+            updatedFields.push('package (removed)');
+        }
+
+        let finalOptions = { new: true, runValidators: true };
+
+        if (updateData.updatePackage) {
+            const pkgName = updateData.updatePackage.currentName;
+            const updates = updateData.updatePackage.updates;
+            const filterName = 'pkgElement';
+
+            updateOperation.$set = updateOperation.$set || {};
+            Object.keys(updates).forEach(key => {
+                updateOperation.$set[`packages.$[${filterName}].${key}`] = updates[key];
+            });
+
+            finalOptions.arrayFilters = [{ [`${filterName}.name`]: new RegExp(`^${pkgName}$`, 'i') }];
+            updatedFields.push('package (updated)');
+        }
+
+        if (updatedFields.length === 0) {
+            return {
+                success: false,
+                message: 'No valid fields or operations provided for update.'
+            };
+        }
+
+        const event = await Event.findOneAndUpdate(
+            { vendor: vendorId, name: new RegExp(`^${listingName}$`, 'i') },
+            updateOperation,
+            finalOptions
+        );
+
+        if (!event) {
+            return {
+                success: false,
+                message: `No listing found matching "${listingName}" to update.`
+            };
+        }
+
+        return {
+            success: true,
+            message: `Successfully updated listing "${listingName}".`,
+            updatedFields,
+            listing: {
+                id: event._id,
+                name: event.name,
+                description: event.description,
+                category: event.category,
+                services: event.services,
+                offerings: event.offerings,
+                packages: event.packages
+            }
+        };
+    } catch (error) {
+        console.error('Error in updateVendorListing:', error);
+        return {
+            success: false,
+            message: error.message || 'Failed to update listing.'
+        };
+    }
+};
+
+/**
+ * Search for vendors/listings by location
+ * @param {string} location - Location string (city, state, etc.)
+ * @returns {Promise<Object>} Search results
+ */
+const searchVendorsByLocation = async (location) => {
+    try {
+        // Handle common state abbreviations
+        const stateMapping = {
+            'nj': 'New Jersey',
+            'ny': 'New York',
+            'ca': 'California',
+            'tx': 'Texas',
+            'fl': 'Florida',
+            'il': 'Illinois',
+            'pa': 'Pennsylvania',
+            'ga': 'Georgia',
+            'va': 'Virginia',
+            'md': 'Maryland',
+            'ct': 'Connecticut'
+        };
+
+        const searchTerms = location.toLowerCase().trim();
+        const mappedLocation = stateMapping[searchTerms] || location;
+
+        // Search in city or state
+        const query = {
+            $or: [
+                { 'location.city': new RegExp(searchTerms, 'i') },
+                { 'location.state': new RegExp(searchTerms, 'i') },
+                { 'location.state': new RegExp(`^${mappedLocation}$`, 'i') }
+            ]
+        };
+
+        const events = await Event.find(query)
+            .populate('vendor', 'name businessName')
+            .select('name category description offerings services packages flatPrice location');
+
+        if (!events || events.length === 0) {
+            return {
+                found: false,
+                message: `No vendors found in "${location}"`,
+                results: []
+            };
+        }
+
+        const results = events.map(event => ({
+            listingName: event.name,
+            vendorName: event.vendor?.businessName || event.vendor?.name || 'Unknown Vendor',
+            category: event.category,
+            offerings: event.offerings || [],
+            services: event.services || [],
+            location: event.location,
+            pricing: {
+                flatPrice: event.flatPrice?.isActive ? event.flatPrice.amount : null,
+                currency: event.flatPrice?.currency || 'USD',
+                packages: event.packages.map(p => ({
+                    name: p.name,
+                    price: p.price,
+                    pricingMode: p.pricingMode,
+                    currency: p.currency || 'USD'
+                }))
+            }
+        }));
+
+        return {
+            found: true,
+            totalResults: results.length,
+            results: results
+        };
+    } catch (error) {
+        console.error('Error in searchVendorsByLocation:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     getBudgetAnalysis,
     getValidCategories,
@@ -1027,5 +1221,7 @@ module.exports = {
     compareVendorPricing,
     getVendorListingDetails,
     getVendorListings,
-    auditVendorListings
+    auditVendorListings,
+    updateVendorListing,
+    searchVendorsByLocation
 };
