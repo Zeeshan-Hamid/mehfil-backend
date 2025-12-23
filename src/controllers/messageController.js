@@ -392,9 +392,17 @@ exports.sendMessage = catchAsync(async (req, res) => {
 
         // Create notification for the receiver
         try {
+            // Get sender and receiver roles for logging
+            const senderRole = req.user.role;
+            const receiverRole = receiver.role;
+            const messageDirection = `${senderRole} → ${receiverRole}`;
+            
             console.log('🔔 [NOTIFICATION TRIGGER] Creating message notification', {
                 senderId,
+                senderRole,
                 receiverId,
+                receiverRole,
+                direction: messageDirection,
                 messageId: newMessage._id,
                 conversationId: newMessage.conversationId
             });

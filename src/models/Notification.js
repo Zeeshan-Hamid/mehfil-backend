@@ -111,13 +111,25 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
   // Get sender details for notification
   const senderUser = await mongoose.model('User').findById(sender).select('role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
   
-  
+  // Get receiver details to log direction
+  const receiverUser = await mongoose.model('User').findById(receiver).select('role');
   
   const senderName = senderUser.role === 'customer' 
     ? senderUser.customerProfile?.fullName 
     : senderUser.vendorProfile?.businessName || senderUser.vendorProfile?.ownerName || 'Vendor';
 
+  const messageDirection = `${senderUser.role} → ${receiverUser?.role || 'unknown'}`;
   
+  console.log('💬 [MESSAGE NOTIFICATION] Creating notification', {
+    senderId: sender,
+    senderRole: senderUser.role,
+    senderName: senderName,
+    receiverId: receiver,
+    receiverRole: receiverUser?.role,
+    direction: messageDirection,
+    messageId: message._id,
+    conversationId: message.conversationId
+  });
 
   const notificationData = {
     recipient: receiver,
@@ -142,6 +154,9 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
   console.log('📬 Notification created:', {
     id: notification._id,
     recipient: notification.recipient,
+    recipientRole: receiverUser?.role,
+    senderRole: senderUser.role,
+    direction: messageDirection,
     type: notification.type,
     title: notification.title,
   });

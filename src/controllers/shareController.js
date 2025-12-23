@@ -295,6 +295,10 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
       </html>
     `);
   } else if (device.isAndroid) {
+    // Android Intent URL as fallback (more reliable than App Links alone)
+    // Format: intent://path#Intent;scheme=https;package=com.package.name;end
+    const intentUrl = `intent://app/event/${eventId}#Intent;scheme=https;package=${ANDROID_PACKAGE_NAME};S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end`;
+    
     return res.send(`
       <!DOCTYPE html>
       <html>
@@ -361,21 +365,30 @@ exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
           <a href="${webUrl}" class="button">View on Web</a>
         </div>
         <script>
-          // Try to open app via App Link
-          // If app is installed, Android will intercept and open it
-          // If app is not installed, redirect to Play Store after short delay
+          // Strategy 1: Try Android Intent URL first (most reliable)
+          // This will open the app if installed, or fallback to Play Store
+          try {
+            window.location.href = '${intentUrl}';
+          } catch (e) {
+            // Fallback to App Link if Intent URL fails
+            window.location.href = '${universalLink}';
+          }
+          
+          // Strategy 2: Also try App Link (HTTPS URL) - Android will intercept if assetlinks.json is configured
+          // This works in parallel with the Intent URL
+          setTimeout(function() {
+            window.location.href = '${universalLink}';
+          }, 100);
+          
+          // Strategy 3: Fallback to Play Store if app doesn't open after 1.5 seconds
           var startTime = Date.now();
           var checkInterval = setInterval(function() {
-            // If page is still visible after 1 second, app likely didn't open
-            // Redirect to Play Store
-            if (Date.now() - startTime > 1000) {
+            if (Date.now() - startTime > 1500) {
               clearInterval(checkInterval);
+              // Only redirect if page is still visible (app didn't open)
               window.location.href = '${playStoreUrl}';
             }
           }, 100);
-          
-          // Also try immediate navigation (Android may intercept)
-          window.location.href = '${universalLink}';
         </script>
       </body>
       </html>
@@ -420,4 +433,47 @@ exports.serveAppleAppSiteAssociation = (req, res) => {
 
   res.setHeader('Content-Type', 'application/json');
   res.json(association);
+};
+
+/**
+ * @desc    Serve Android Asset Links file for App Links
+ * @route   GET /.well-known/assetlinks.json
+ * @access  Public
+ */
+exports.serveAndroidAssetLinks = (req, res) => {
+  const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.moneebb.mehfilappfrontend';
+  
+  // Get SHA-256 fingerprints from environment variable
+  // Can be comma-separated for multiple fingerprints (debug + release)
+  // Format: "SHA256:XX:XX:XX:..." or just "XX:XX:XX:..." (colons optional)
+  const sha256Fingerprints = process.env.ANDROID_SHA256_FINGERPRINTS || '';
+  
+  // Parse fingerprints - support multiple formats
+  let fingerprints = [];
+  if (sha256Fingerprints) {
+    fingerprints = sha256Fingerprints
+      .split(',')
+      .map(fp => fp.trim())
+      .map(fp => {
+        // Remove "SHA256:" prefix if present, and remove colons
+        return fp.replace(/^SHA256:/i, '').replace(/:/g, '').toLowerCase();
+      })
+      .filter(fp => fp.length > 0);
+  }
+  
+  // If no fingerprints provided, return empty array (Android will still try to verify)
+  // This allows the endpoint to exist even if fingerprints aren't configured yet
+  const assetLinks = [
+    {
+      relation: ["delegate_permission/common.handle_all_urls"],
+      target: {
+        namespace: "android_app",
+        package_name: ANDROID_PACKAGE_NAME,
+        sha256_cert_fingerprints: fingerprints.length > 0 ? fingerprints : []
+      }
+    }
+  ];
+
+  res.setHeader('Content-Type', 'application/json');
+  res.json(assetLinks);
 };
