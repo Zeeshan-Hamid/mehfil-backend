@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Message = require('../models/Message');
 const Notification = require('../models/Notification');
@@ -159,9 +160,17 @@ class SocketService {
         } catch (_) {}
       }
 
+      // Get sender and receiver roles for logging
+      const senderUser = await mongoose.model('User').findById(socket.userId).select('role');
+      const receiverUser = await mongoose.model('User').findById(receiverId).select('role');
+      const messageDirection = `${senderUser?.role || 'unknown'} → ${receiverUser?.role || 'unknown'}`;
+      
       console.log('🔔 [NOTIFICATION TRIGGER] Creating message notification via Socket.IO', {
         senderId: socket.userId,
+        senderRole: senderUser?.role,
         receiverId,
+        receiverRole: receiverUser?.role,
+        direction: messageDirection,
         messageId: newMessage._id,
         conversationId: newMessage.conversationId
       });
