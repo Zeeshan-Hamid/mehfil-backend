@@ -1,96 +1,169 @@
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const admin = require('firebase-admin');
 
-function isExpoPushToken(token) {
-  return typeof token === 'string' && token.startsWith('ExponentPushToken[');
-}
+// Initialize Firebase Admin SDK
+// Note: You need to set up Firebase credentials
+// Place your serviceAccountKey.json in the project root or set GOOGLE_APPLICATION_CREDENTIALS env var
+let firebaseInitialized = false;
 
-async function sendExpoPushNotification(tokens, notification) {
-  const tokenArray = Array.isArray(tokens) ? tokens : [tokens];
-  const validTokens = tokenArray.filter(isExpoPushToken);
-
-  if (validTokens.length === 0) {
-    console.warn('[PushService] No valid Expo tokens; skipping send', {
-      rawTokensCount: tokenArray.length,
-      rawTokens: tokenArray,
-    });
+function initializeFirebase() {
+  if (firebaseInitialized) {
     return;
   }
 
-  const messages = validTokens.map((to) => ({
-    to,
-    sound: 'default',
-    title: notification.title,
-    body: notification.message,
-    data: notification.data || {},
-  }));
-
-  // Use global fetch if available (Node 18+), otherwise lazy-require node-fetch
-  const fetchFn =
-    typeof fetch === 'function' ? fetch : (await import('node-fetch')).default;
-
-  console.log('[PushService] Sending Expo push request', {
-    url: EXPO_PUSH_URL,
-    messagesCount: messages.length,
-  });
-
-  const response = await fetchFn(EXPO_PUSH_URL, {
-    method: 'POST',
-    headers: {
-      accept: 'application/json',
-      'accept-encoding': 'gzip, deflate',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(messages),
-  });
-
-  let json;
   try {
-    json = await response.json();
-  } catch (e) {
-    json = null;
+    // Check if Firebase is already initialized
+    if (admin.apps.length === 0) {
+      // Option 1: Use service account key file
+      if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+      }
+      // Option 2: Use GOOGLE_APPLICATION_CREDENTIALS environment variable
+      else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        admin.initializeApp({
+          credential: admin.credential.applicationDefault(),
+        });
+      }
+      // Option 3: Use service account key file path
+      else {
+        const serviceAccount = require('../../serviceAccountKey.json');
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+      }
+    }
+    firebaseInitialized = true;
+    console.log('[PushService] Firebase Admin SDK initialized');
+  } catch (error) {
+    console.error('[PushService] Failed to initialize Firebase Admin SDK:', error.message);
+    throw error;
+  }
+}
+
+// Detect if token is iOS (APNS) or Android (FCM)
+function detectPlatform(token) {
+  // FCM tokens are typically longer and don't have a specific prefix
+  // iOS APNS tokens are 64 hex characters
+  // For now, we'll assume all tokens are FCM tokens unless specified
+  // You can enhance this by storing platform info with the token
+  return 'android'; // Default to Android/FCM
+}
+
+// Send push notification to FCM (works for both Android and iOS)
+async function sendFCMPushNotification(tokens, notification) {
+  initializeFirebase();
+
+  const tokenArray = Array.isArray(tokens) ? tokens : [tokens];
+  
+  if (tokenArray.length === 0) {
+    console.warn('[PushService] No tokens provided; skipping send');
+    return;
   }
 
-  if (!response.ok) {
-    console.error('[PushService] Expo push request failed', {
-      status: response.status,
-      statusText: response.statusText,
-      body: json,
+  const message = {
+    notification: {
+      title: notification.title,
+      body: notification.message,
+    },
+    data: {
+      notificationId: String(notification.data?.notificationId || ''),
+      type: String(notification.data?.type || ''),
+      ...Object.fromEntries(
+        Object.entries(notification.data || {}).map(([key, value]) => [
+          key,
+          String(value),
+        ])
+      ),
+    },
+    android: {
+      priority: 'high',
+      notification: {
+        sound: 'default',
+        channelId: 'default-channel',
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default',
+          badge: notification.data?.badge || undefined,
+        },
+      },
+    },
+    tokens: tokenArray,
+  };
+
+  try {
+    console.log('[PushService] Sending FCM push notification', {
+      tokensCount: tokenArray.length,
+      title: notification.title,
     });
-  } else {
-    // Expo API returns 200 even if individual messages fail
-    // Check the data array for error statuses
-    if (json && json.data && Array.isArray(json.data)) {
-      json.data.forEach((result, index) => {
-        if (result.status === 'error') {
-          console.error(`[PushService] Expo push failed for message ${index}:`, {
-            status: result.status,
-            message: result.message,
-            details: result.details,
-            token: validTokens[index]
+
+    const response = await admin.messaging().sendEachForMulticast(message);
+
+    console.log('[PushService] FCM push notification sent', {
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+    });
+
+    // Handle failures
+    if (response.failureCount > 0) {
+      const failedTokens = [];
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          console.error(`[PushService] Failed to send to token ${idx}:`, {
+            error: resp.error?.code,
+            message: resp.error?.message,
+            token: tokenArray[idx]?.substring(0, 20) + '...',
           });
-        } else if (result.status === 'ok') {
-          console.log(`[PushService] Expo push succeeded for message ${index}:`, {
-            status: result.status,
-            id: result.id,
-            token: validTokens[index]?.substring(0, 30) + '...'
-          });
+          
+          // Check if token is invalid and should be removed
+          if (
+            resp.error?.code === 'messaging/invalid-registration-token' ||
+            resp.error?.code === 'messaging/registration-token-not-registered'
+          ) {
+            failedTokens.push(tokenArray[idx]);
+          }
         }
       });
-    }
-    
-    console.log('[PushService] Expo push request completed', {
-      status: response.status,
-      totalMessages: messages.length,
-      responseBody: JSON.stringify(json, null, 2),
-    });
-  }
 
-  return json;
+      return {
+        success: true,
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+        failedTokens,
+      };
+    }
+
+    return {
+      success: true,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+    };
+  } catch (error) {
+    console.error('[PushService] FCM push notification error:', {
+      error: error.message,
+      code: error.code,
+    });
+    throw error;
+  }
+}
+
+// Send to single device
+async function sendPushNotification(token, notification) {
+  return sendFCMPushNotification([token], notification);
+}
+
+// Send to multiple devices
+async function sendPushNotificationToMultiple(tokens, notification) {
+  return sendFCMPushNotification(tokens, notification);
 }
 
 module.exports = {
-  sendExpoPushNotification,
-  isExpoPushToken,
+  sendFCMPushNotification,
+  sendPushNotification,
+  sendPushNotificationToMultiple,
+  initializeFirebase,
 };
-
-

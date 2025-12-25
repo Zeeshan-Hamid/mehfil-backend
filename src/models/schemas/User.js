@@ -74,10 +74,16 @@ const userSchema = new mongoose.Schema(
       },
     },
 
-    // Push notification tokens (Expo)
-    expoPushTokens: {
+    // Push notification tokens (FCM for Android, APNS for iOS)
+    fcmTokens: {
       type: [String],
       default: [],
+    },
+    // Platform info for each token (optional, for better targeting)
+    fcmTokenPlatforms: {
+      type: Map,
+      of: String, // 'android' or 'ios'
+      default: {},
     },
 
     isActive: {

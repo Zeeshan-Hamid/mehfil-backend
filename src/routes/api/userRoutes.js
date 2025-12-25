@@ -7,7 +7,7 @@ const { registerPushToken } = require('../../controllers/userController');
 router.use(protect);
 
 // @route   POST /api/users/push-token
-// @desc    Register Expo push token for current user
+// @desc    Register FCM push token for current user
 // @access  Private
 router.post('/push-token', registerPushToken);
 
