@@ -42,19 +42,32 @@ exports.registerPushToken = catchAsync(async (req, res) => {
     });
   }
 
-  // Remove old token if it exists (to avoid duplicates)
-  const updatedTokens = user.fcmTokens.filter(token => token !== fcmToken);
+  // FIX: Handle undefined fcmTokens array
+  const currentTokens = user.fcmTokens || [];
+  const updatedTokens = currentTokens.filter(token => token !== fcmToken);
   updatedTokens.push(fcmToken);
 
-  // Update platform info
-  const updatedPlatforms = user.fcmTokenPlatforms || new Map();
-  updatedPlatforms.set(fcmToken, platformType);
+  // FIX: Handle fcmTokenPlatforms properly for Mongoose
+  let updatedPlatforms = user.fcmTokenPlatforms;
+  if (!updatedPlatforms) {
+    updatedPlatforms = new Map();
+  }
+  // Convert to plain object for Mongoose Map
+  const platformsObj = {};
+  if (updatedPlatforms instanceof Map) {
+    updatedPlatforms.forEach((value, key) => {
+      platformsObj[key] = value;
+    });
+  } else if (typeof updatedPlatforms === 'object' && updatedPlatforms !== null) {
+    Object.assign(platformsObj, updatedPlatforms);
+  }
+  platformsObj[fcmToken] = platformType;
 
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     { 
       fcmTokens: updatedTokens,
-      fcmTokenPlatforms: updatedPlatforms,
+      fcmTokenPlatforms: platformsObj,
     },
     { new: true }
   );
@@ -63,6 +76,7 @@ exports.registerPushToken = catchAsync(async (req, res) => {
     userId,
     fcmTokensCount: updatedUser?.fcmTokens?.length || 0,
     platform: platformType,
+    tokens: updatedUser?.fcmTokens,
   });
 
   return res.status(200).json({ 
