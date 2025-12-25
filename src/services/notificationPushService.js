@@ -1,8 +1,13 @@
 const User = require('../models/User');
-const { sendExpoPushNotification } = require('./pushService');
+const { sendFCMPushNotification } = require('./pushService');
 
+/**
+ * Send push notification for an in-app notification
+ * This is ALWAYS called when a notification is created, regardless of user online status
+ * The flow: In-app notification created → Socket.IO broadcast → Push notification sent
+ */
 async function sendPushForNotification(notification) {
-  console.log('🚀 [EXPO PUSH] sendPushForNotification called', {
+  console.log('🚀 [PUSH NOTIFICATION] sendPushForNotification called', {
     notificationId: notification?._id,
     recipientId: notification?.recipient,
     type: notification?.type,
@@ -11,7 +16,7 @@ async function sendPushForNotification(notification) {
 
   try {
     if (!notification || !notification.recipient) {
-      console.warn('⚠️ [EXPO PUSH] Notification or recipient missing', {
+      console.warn('⚠️ [PUSH NOTIFICATION] Notification or recipient missing', {
         notificationId: notification && notification._id,
         hasNotification: !!notification,
         hasRecipient: !!(notification && notification.recipient),
@@ -19,26 +24,29 @@ async function sendPushForNotification(notification) {
       return;
     }
 
-    console.log('🔍 [EXPO PUSH] Loading recipient user from database', {
+    const recipientId = notification.recipient._id 
+      ? notification.recipient._id.toString() 
+      : notification.recipient.toString();
+
+    console.log('🔍 [PUSH NOTIFICATION] Loading recipient user from database', {
       notificationId: notification._id,
-      recipientId: notification.recipient
+      recipientId: recipientId
     });
 
-    const user = await User.findById(notification.recipient).select('expoPushTokens');
+    const user = await User.findById(recipientId).select('fcmTokens fcmTokenPlatforms');
 
-    console.log('✅ [EXPO PUSH] Loaded recipient for notification', {
+    console.log('✅ [PUSH NOTIFICATION] Loaded recipient for notification', {
       notificationId: notification._id,
-      recipientId: notification.recipient,
+      recipientId: recipientId,
       hasUser: !!user,
-      expoPushTokensCount: user?.expoPushTokens?.length || 0,
-      expoPushTokens: user?.expoPushTokens,
+      fcmTokensCount: user?.fcmTokens?.length || 0,
     });
 
-    if (!user || !user.expoPushTokens || user.expoPushTokens.length === 0) {
-      console.warn('⚠️ [EXPO PUSH] No Expo tokens for recipient; skipping push', {
-        recipientId: notification.recipient,
+    if (!user || !user.fcmTokens || user.fcmTokens.length === 0) {
+      console.warn('⚠️ [PUSH NOTIFICATION] No FCM tokens for recipient; skipping push', {
+        recipientId: recipientId,
         hasUser: !!user,
-        expoPushTokensCount: user?.expoPushTokens?.length || 0,
+        fcmTokensCount: user?.fcmTokens?.length || 0,
       });
       return;
     }
@@ -47,43 +55,59 @@ async function sendPushForNotification(notification) {
       title: notification.title,
       message: notification.message,
       data: {
-        notificationId: notification._id,
+        notificationId: String(notification._id),
         type: notification.type,
         ...(notification.data || {}),
       },
     };
 
-    console.log('📤 [EXPO PUSH] Sending Expo push notification to Expo API', {
-      recipientId: notification.recipient,
+    console.log('📤 [PUSH NOTIFICATION] Sending FCM push notification', {
+      recipientId: recipientId,
       notificationId: notification._id,
       title: payload.title,
       message: payload.message,
-      expoPushTokensCount: user.expoPushTokens.length,
-      expoPushTokens: user.expoPushTokens,
+      fcmTokensCount: user.fcmTokens.length,
     });
 
-    const result = await sendExpoPushNotification(user.expoPushTokens, payload);
+    // Always send push notification (works for both online and offline users)
+    // Socket.IO handles in-app updates, push handles system notifications
+    const result = await sendFCMPushNotification(user.fcmTokens, payload);
     
-    console.log('✅ [EXPO PUSH] Expo push notification sent successfully', {
+    console.log('✅ [PUSH NOTIFICATION] FCM push notification sent successfully', {
       notificationId: notification._id,
-      recipientId: notification.recipient,
-      result: result
+      recipientId: recipientId,
+      successCount: result?.successCount || 0,
+      failureCount: result?.failureCount || 0,
     });
+
+    // If there are failed tokens (invalid tokens), remove them from user
+    if (result?.failedTokens && result.failedTokens.length > 0) {
+      console.log('🧹 [PUSH NOTIFICATION] Removing invalid FCM tokens', {
+        recipientId: recipientId,
+        invalidTokensCount: result.failedTokens.length,
+      });
+      
+      await User.findByIdAndUpdate(
+        recipientId,
+        { 
+          $pull: { fcmTokens: { $in: result.failedTokens } }
+        }
+      );
+    }
 
     return result;
   } catch (err) {
-    console.error('❌ [EXPO PUSH] Failed to send push for notification', {
+    console.error('❌ [PUSH NOTIFICATION] Failed to send push for notification', {
       notificationId: notification && notification._id,
       recipientId: notification?.recipient,
       error: err.message,
       stack: err.stack
     });
-    throw err; // Re-throw so caller can handle it
+    // Don't throw - we don't want push failures to break notification creation
+    return null;
   }
 }
 
 module.exports = {
   sendPushForNotification,
 };
-
-
