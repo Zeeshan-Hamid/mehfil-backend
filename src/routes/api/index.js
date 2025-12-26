@@ -28,6 +28,7 @@ const blogRoutes = require('./blogRoutes');
 const marketplaceRoutes = require('./marketplaceRoutes');
 const shareRoutes = require('./shareRoutes');
 const userRoutes = require('./userRoutes');
+const testRoutes = require('./testRoutes');
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -72,5 +73,6 @@ router.use('/blogs', blogRoutes);
 router.use('/marketplace', marketplaceRoutes);
 router.use('/', shareRoutes);
 router.use('/users', userRoutes);
+router.use('/test', testRoutes);
 
 module.exports = router; 
