@@ -10,8 +10,16 @@ src/scripts/
 package-lock.json
 
 create*.js
+
+# Ignore test scripts in root directory only
+/test*.js
+# Allow test controllers and routes in src directory
+!src/controllers/testController.js
+!src/routes/**/testRoutes.js
+
 test*.js
 tests/
+
 
 
 # Environment variables

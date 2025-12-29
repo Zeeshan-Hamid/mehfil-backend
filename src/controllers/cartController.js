@@ -286,6 +286,9 @@ exports.addToCart = async (req, res) => {
       // Broadcast notification via socket if available
       const socketService = req.app.get('socketService');
       if (socketService) {
+        console.log('📡 [NOTIFICATION TRIGGER] Broadcasting cart notification via Socket.IO', {
+          notificationId: notification._id
+        });
         socketService.broadcastNotification(notification);
       }
     } catch (notificationError) {
@@ -394,6 +397,11 @@ exports.removeFromCart = async (req, res) => {
 
     // Create notification for vendor about cart removal
     try {
+      console.log('🔔 [NOTIFICATION TRIGGER] Creating cart removal notification', {
+        customerId: req.user.id,
+        eventId: cartItem.event,
+        packageType: cartItem.packageType
+      });
       const Notification = require('../models/Notification');
       const cartData = {
         customerId: req.user.id,
@@ -410,9 +418,20 @@ exports.removeFromCart = async (req, res) => {
       // Broadcast notification via socket if available
       const socketService = req.app.get('socketService');
       if (socketService) {
+        console.log('📡 [NOTIFICATION TRIGGER] Broadcasting cart removal notification via Socket.IO', {
+          notificationId: notification._id
+        });
         socketService.broadcastNotification(notification);
+      } else {
+        console.warn('⚠️ [NOTIFICATION TRIGGER] Socket service not available, skipping Socket.IO broadcast');
       }
     } catch (notificationError) {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to create cart removal notification', {
+        customerId: req.user.id,
+        eventId: cartItem.event,
+        error: notificationError.message,
+        stack: notificationError.stack
+      });
       // Failed to create cart removal notification
       // Don't fail the cart operation if notification fails
     }

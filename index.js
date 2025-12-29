@@ -117,6 +117,23 @@ cronService.init();
 // API Routes
 app.use('/api', apiRoutes);
 
+// Share redirect routes (before welcome and 404)
+const shareRedirectRoutes = require('./src/routes/shareRedirectRoutes');
+app.use('/share', shareRedirectRoutes);
+
+// Universal/App Link routes (must be at root level for deep linking)
+const { handleAppLinkLanding, serveAppleAppSiteAssociation, serveAndroidAssetLinks } = require('./src/controllers/shareController');
+app.get('/app/event/:eventId', handleAppLinkLanding);
+app.get('/app/listing/:eventId', handleAppLinkLanding); // alias
+app.get('/app/vendor/event/:eventId', handleAppLinkLanding); // vendor-specific route
+app.get('/app/vendor/listing/:eventId', handleAppLinkLanding); // vendor-specific route alias
+
+// Apple App Site Association file (required for Universal Links)
+app.get('/.well-known/apple-app-site-association', serveAppleAppSiteAssociation);
+
+// Android Asset Links file (required for App Links)
+app.get('/.well-known/assetlinks.json', serveAndroidAssetLinks);
+
 // Welcome route
 app.get('/', (req, res) => {
   res.json({

@@ -1,0 +1,479 @@
+const Event = require('../models/Event');
+const mongoose = require('mongoose');
+const { detectDevice } = require('../utils/deviceDetection');
+
+const catchAsync = fn => {
+  return (req, res, next) => {
+    fn(req, res, next).catch(next);
+  };
+};
+
+/**
+ * Get base URL for share links
+ * Uses BACKEND_URL if available, otherwise constructs from request
+ */
+function getBaseUrl(req) {
+  // Check for BACKEND_URL environment variable first
+  if (process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL.replace(/\/$/, ''); // Remove trailing slash
+  }
+  
+  // Fallback to constructing from request
+  const protocol = req.protocol || 'https';
+  const host = req.get('host') || 'mehfil.app';
+  return `${protocol}://${host}`;
+}
+
+/**
+ * @desc    Generate share link for an event
+ * @route   GET /api/events/:eventId/share
+ * @access  Public
+ */
+exports.generateShareLink = catchAsync(async (req, res, next) => {
+  const { eventId } = req.params;
+
+  // Validate event exists
+  const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+  
+  let event = null;
+  if (isValidObjectId) {
+    event = await Event.findById(eventId);
+  } else {
+    event = await Event.findOne({ slug: eventId });
+  }
+
+  if (!event) {
+    return res.status(404).json({
+      status: 'fail',
+      message: 'Event not found'
+    });
+  }
+
+  const baseUrl = getBaseUrl(req);
+  const shareUrl = `${baseUrl}/share/event/${event._id}`;
+
+  res.status(200).json({
+    success: true,
+    data: {
+      shareUrl,
+      eventId: event._id,
+      eventName: event.name
+    }
+  });
+});
+
+/**
+ * @desc    Handle share link redirect based on device
+ * @route   GET /share/event/:eventId
+ * @access  Public
+ */
+exports.handleShareRedirect = catchAsync(async (req, res, next) => {
+  const { eventId } = req.params;
+
+  // Validate event exists
+  const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+  
+  let event = null;
+  if (isValidObjectId) {
+    event = await Event.findById(eventId);
+  } else {
+    event = await Event.findOne({ slug: eventId });
+  }
+
+  if (!event) {
+    // Redirect to 404 page or frontend error page
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/404`);
+  }
+
+  // Detect device from User-Agent
+  const userAgent = req.headers['user-agent'] || '';
+  const device = detectDevice(userAgent);
+
+  const baseUrl = getBaseUrl(req);
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  
+  // App Store and Play Store URLs (should be set in environment variables)
+  const iOS_APP_STORE_ID = process.env.IOS_APP_STORE_ID || '';
+  const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.moneebb.mehfilappfrontend';
+
+  // Universal Link and App Link paths
+  // Use universal route - frontend will auto-detect vendor/customer role
+  const universalLink = `${baseUrl}/app/event/${eventId}`;
+  // Alternative vendor-specific route (if needed): `${baseUrl}/app/vendor/event/${eventId}`;
+  const appStoreUrl = iOS_APP_STORE_ID 
+    ? `https://apps.apple.com/app/id${iOS_APP_STORE_ID}?pt=event&id=${eventId}`
+    : 'https://apps.apple.com'; // Fallback to App Store home if ID not configured
+  const playStoreUrl = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_NAME}&referrer=event_${eventId}`;
+  
+  // Use slug if available, otherwise use ID
+  // Frontend route pattern can be configured via FRONTEND_EVENT_ROUTE (default: /events/)
+  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/vendor_listing_details';
+  const eventIdentifier = event.slug || eventId;
+  const webUrl = `${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`;
+
+  // Smart redirect based on device
+  if (device.isMobile) {
+    // For mobile, use server-side 302 redirect directly to Universal Link
+    // This is the most reliable way for iOS/Android to auto-open the app
+    return res.redirect(302, universalLink);
+  } else {
+    // Web/Desktop - redirect to web version
+    return res.redirect(webUrl);
+  }
+});
+
+/**
+ * @desc    Universal/App Link landing for /app/event/:eventId
+ *          Serves a simple HTML page that lets Universal Links work.
+ *          If app is installed, iOS/Android will intercept and open the app.
+ *          If app is not installed, shows a download page with store links.
+ * @route   GET /app/event/:eventId
+ * @access  Public
+ */
+exports.handleAppLinkLanding = catchAsync(async (req, res, next) => {
+  const { eventId } = req.params;
+
+  // Validate event exists (ID or slug)
+  const isValidObjectId = mongoose.Types.ObjectId.isValid(eventId) && /^[0-9a-fA-F]{24}$/.test(eventId);
+  let event = null;
+  if (isValidObjectId) {
+    event = await Event.findById(eventId);
+  } else {
+    event = await Event.findOne({ slug: eventId });
+  }
+
+  if (!event) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/404`);
+  }
+
+  // Detect device
+  const userAgent = req.headers['user-agent'] || '';
+  const device = detectDevice(userAgent);
+  
+  const baseUrl = getBaseUrl(req);
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const iOS_APP_STORE_ID = process.env.IOS_APP_STORE_ID || '';
+  const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.moneebb.mehfilappfrontend';
+  
+  // Universal Link path
+  const universalLink = `${baseUrl}/app/event/${eventId}`;
+  
+  // Use slug if available, otherwise use ID
+  const eventRoute = process.env.FRONTEND_EVENT_ROUTE || '/vendor_listing_details';
+  const eventIdentifier = event.slug || eventId;
+  const webUrl = `${frontendUrl}${eventRoute.replace(/\/$/, '')}/${eventIdentifier}`;
+  
+  const appStoreUrl = iOS_APP_STORE_ID 
+    ? `https://apps.apple.com/app/id${iOS_APP_STORE_ID}?pt=event&id=${eventId}`
+    : 'https://apps.apple.com';
+  const playStoreUrl = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_NAME}&referrer=event_${eventId}`;
+
+  // Serve HTML page - Universal Links will intercept if app is installed
+  // If not installed, show download options
+  if (device.isIOS) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${event.name} - Mehfil</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="apple-itunes-app" content="app-id=${iOS_APP_STORE_ID || ''}">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #AF8EBA 0%, #C4A8D0 100%);
+            color: white;
+            text-align: center;
+          }
+          .container {
+            max-width: 400px;
+          }
+          h1 {
+            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
+          }
+          p {
+            margin: 0.5rem 0;
+            opacity: 0.9;
+          }
+          .button {
+            display: inline-block;
+            margin: 1rem 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #AF8EBA;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+          }
+          .button:hover {
+            opacity: 0.9;
+          }
+          .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          .arrow-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            text-align: center;
+            background: rgba(175, 142, 186, 0.95);
+            z-index: 1000;
+            animation: pulse 2s ease-in-out infinite;
+          }
+          .arrow-up {
+            font-size: 2rem;
+            color: white;
+            margin-bottom: 0.5rem;
+            animation: bounce 1s ease-in-out infinite;
+          }
+          .arrow-text {
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: white;
+          }
+          @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="arrow-container">
+          <div class="arrow-up">↑</div>
+          <p class="arrow-text">Tap "Open" above to go to app</p>
+        </div>
+        <div class="container">
+          <a href="${appStoreUrl}" class="button">Download App</a>
+          <a href="${webUrl}" class="button">View on Web</a>
+        </div>
+        <script>
+          // Try to open app via Universal Link
+          // If app is installed, iOS will intercept and open it
+          // If app is not installed, redirect to App Store after short delay
+          var startTime = Date.now();
+          var checkInterval = setInterval(function() {
+            // If page is still visible after 1 second, app likely didn't open
+            // Redirect to App Store
+            if (Date.now() - startTime > 1000) {
+              clearInterval(checkInterval);
+              window.location.href = '${appStoreUrl}';
+            }
+          }, 100);
+          
+          // Also try immediate navigation (iOS may intercept)
+          window.location.href = '${universalLink}';
+        </script>
+      </body>
+      </html>
+    `);
+  } else if (device.isAndroid) {
+    // Android Intent URL as fallback (more reliable than App Links alone)
+    // Format: intent://path#Intent;scheme=https;package=com.package.name;end
+    const intentUrl = `intent://app/event/${eventId}#Intent;scheme=https;package=${ANDROID_PACKAGE_NAME};S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end`;
+    
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${event.name} - Mehfil</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #AF8EBA 0%, #C4A8D0 100%);
+            color: white;
+            text-align: center;
+          }
+          .container {
+            max-width: 400px;
+          }
+          h1 {
+            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
+          }
+          p {
+            margin: 0.5rem 0;
+            opacity: 0.9;
+          }
+          .button {
+            display: inline-block;
+            margin: 1rem 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #AF8EBA;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+          }
+          .button:hover {
+            opacity: 0.9;
+          }
+          .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <a href="${playStoreUrl}" class="button">Download App</a>
+          <a href="${webUrl}" class="button">View on Web</a>
+        </div>
+        <script>
+          // Strategy 1: Try Android Intent URL first (most reliable)
+          // This will open the app if installed, or fallback to Play Store
+          try {
+            window.location.href = '${intentUrl}';
+          } catch (e) {
+            // Fallback to App Link if Intent URL fails
+            window.location.href = '${universalLink}';
+          }
+          
+          // Strategy 2: Also try App Link (HTTPS URL) - Android will intercept if assetlinks.json is configured
+          // This works in parallel with the Intent URL
+          setTimeout(function() {
+            window.location.href = '${universalLink}';
+          }, 100);
+          
+          // Strategy 3: Fallback to Play Store if app doesn't open after 1.5 seconds
+          var startTime = Date.now();
+          var checkInterval = setInterval(function() {
+            if (Date.now() - startTime > 1500) {
+              clearInterval(checkInterval);
+              // Only redirect if page is still visible (app didn't open)
+              window.location.href = '${playStoreUrl}';
+            }
+          }, 100);
+        </script>
+      </body>
+      </html>
+    `);
+  } else {
+    // Desktop/web - redirect to web version
+    return res.redirect(webUrl);
+  }
+});
+
+/**
+ * @desc    Serve Apple App Site Association file for Universal Links
+ * @route   GET /.well-known/apple-app-site-association
+ * @access  Public
+ */
+exports.serveAppleAppSiteAssociation = (req, res) => {
+  const IOS_APP_ID = process.env.IOS_APP_ID || 'TEAM_ID.com.moneebb.mehfilapp';
+  
+  // Split the app ID to get team ID and bundle ID
+  const parts = IOS_APP_ID.split('.');
+  const teamId = parts[0];
+  const bundleId = parts.slice(1).join('.');
+
+  const association = {
+    applinks: {
+      apps: [],
+      details: [
+        {
+          appID: `${teamId}.${bundleId}`,
+          paths: [
+            "/app/event/*",
+            "/app/listing/*",
+            "/app/vendor/event/*",
+            "/app/vendor/listing/*",
+            "/share/event/*",
+            "/share/listing/*"
+          ]
+        }
+      ]
+    }
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.json(association);
+};
+
+/**
+ * @desc    Serve Android Asset Links file for App Links
+ * @route   GET /.well-known/assetlinks.json
+ * @access  Public
+ */
+exports.serveAndroidAssetLinks = (req, res) => {
+  const ANDROID_PACKAGE_NAME = process.env.ANDROID_PACKAGE_NAME || 'com.moneebb.mehfilappfrontend';
+  
+  // Get SHA-256 fingerprints from environment variable
+  // Can be comma-separated for multiple fingerprints (debug + release)
+  // Format: "SHA256:XX:XX:XX:..." or just "XX:XX:XX:..." (colons optional)
+  const sha256Fingerprints = process.env.ANDROID_SHA256_FINGERPRINTS || '';
+  
+  // Parse fingerprints - support multiple formats
+  let fingerprints = [];
+  if (sha256Fingerprints) {
+    fingerprints = sha256Fingerprints
+      .split(',')
+      .map(fp => fp.trim())
+      .map(fp => {
+        // Remove "SHA256:" prefix if present, and remove colons
+        return fp.replace(/^SHA256:/i, '').replace(/:/g, '').toLowerCase();
+      })
+      .filter(fp => fp.length > 0);
+  }
+  
+  // If no fingerprints provided, return empty array (Android will still try to verify)
+  // This allows the endpoint to exist even if fingerprints aren't configured yet
+  const assetLinks = [
+    {
+      relation: ["delegate_permission/common.handle_all_urls"],
+      target: {
+        namespace: "android_app",
+        package_name: ANDROID_PACKAGE_NAME,
+        sha256_cert_fingerprints: fingerprints.length > 0 ? fingerprints : []
+      }
+    }
+  ];
+
+  res.setHeader('Content-Type', 'application/json');
+  res.json(assetLinks);
+};

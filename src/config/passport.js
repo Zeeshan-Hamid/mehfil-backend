@@ -2,18 +2,50 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
+// Helper function to get OAuth configuration based on platform
+const getOAuthConfig = (req) => {
+  const isMobile = req.platform && req.platform.isMobile;
+  
+      if (isMobile) {
+        return {
+          clientID: process.env.GOOGLE_CLIENT_ID, // Use web client ID for mobile too
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          callbackURL: 'https://auth.expo.io/@ikhan98/mehfil-app',
+          scope: ['openid', 'email', 'profile']
+        };
+      } else {
+    return {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_REDIRECT_URI,
+      scope: ['openid', 'email', 'profile']
+    };
+  }
+};
+
 module.exports = function(passport) {
-  passport.use(
+  // Web OAuth Strategy (also used for mobile)
+  passport.use('google-web',
     new GoogleStrategy(
       {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: process.env.GOOGLE_REDIRECT_URI,
+        callbackURL: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8000/api/auth/google/callback',
         passReqToCallback: true,
         scope: ['openid', 'email', 'profile']
       },
       async (req, accessToken, refreshToken, profile, done) => {
         try {
+          // Log platform information for debugging
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔐 OAuth Strategy - Platform Info:', {
+              platform: req.platform ? req.platform.type : 'unknown',
+              isMobile: req.platform ? req.platform.isMobile : false,
+              profileId: profile.id,
+              email: profile.emails ? profile.emails[0].value : 'no-email'
+            });
+          }
+
           // Check if user already exists in our database
           let user = await User.findOne({ 'socialLogin.googleId': profile.id });
 
@@ -45,9 +77,15 @@ module.exports = function(passport) {
           
           // If user doesn't exist, create a new one
           // Get role from state parameter in the request
-          const role = req.query.state || req.body.state; // 'customer' or 'vendor'
+          let role = req.query.state || req.body.state; // 'customer', 'vendor', or 'mobile:customer', 'mobile:vendor'
+          
+          // Extract role if it's in mobile:role format
+          if (role && role.startsWith('mobile:')) {
+            role = role.split(':')[1];
+          }
 
           if (!role || !['customer', 'vendor'].includes(role)) {
+            console.error('❌ Invalid role:', role);
             return done(new Error('Invalid role specified for Google OAuth'), null);
           }
 
@@ -169,6 +207,14 @@ module.exports = function(passport) {
 
           await newUser.save({ validateBeforeSave: false });
           
+          console.log('\n========================================');
+          console.log('✅ NEW USER CREATED VIA GOOGLE OAUTH');
+          console.log('========================================');
+          console.log('Email:', newUser.email);
+          console.log('Role:', newUser.role);
+          console.log('Google ID:', newUser.socialLogin.googleId);
+          console.log('========================================\n');
+          
           // Note: Admin notification for Google OAuth vendors will be sent when they complete their profile
           // This is because Google OAuth vendors start with incomplete profiles and need to complete onboarding
           
@@ -177,13 +223,219 @@ module.exports = function(passport) {
           newUserResponse.profileCompleted = role === 'customer' ? 
             newUser.customerProfile.profileCompleted : 
             newUser.vendorProfile.profileCompleted;
+          
+          console.log('👤 Passing user to Passport callback:', {
+            email: newUserResponse.email,
+            role: newUserResponse.role,
+            profileCompleted: newUserResponse.profileCompleted
+          });
+          
           done(null, newUserResponse);
 
         } catch (err) {
-          console.error('Google Strategy Error:', err);
+          console.error('\n========================================');
+          console.error('❌ GOOGLE STRATEGY ERROR');
+          console.error('========================================');
+          console.error('Error:', err.message);
+          console.error('Stack:', err.stack);
+          console.error('========================================\n');
           done(err, false);
         }
       }
     )
   );
+
+  // Mobile OAuth Strategy (DEPRECATED - Use /api/auth/google/mobile/verify instead)
+  // Only register if credentials are provided (for backward compatibility)
+  if (process.env.GOOGLE_MOBILE_CLIENT_ID && process.env.GOOGLE_MOBILE_REDIRECT_URI) {
+    passport.use('google-mobile',
+      new GoogleStrategy(
+        {
+          clientID: process.env.GOOGLE_MOBILE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_MOBILE_CLIENT_SECRET || '',
+          callbackURL: process.env.GOOGLE_MOBILE_REDIRECT_URI,
+          passReqToCallback: true,
+          scope: ['openid', 'email', 'profile']
+        },
+      async (req, accessToken, refreshToken, profile, done) => {
+        try {
+          // Log platform information for debugging
+          if (process.env.NODE_ENV === 'development') {
+            console.log('📱 Mobile OAuth Strategy - Platform Info:', {
+              platform: req.platform ? req.platform.type : 'unknown',
+              isMobile: req.platform ? req.platform.isMobile : false,
+              profileId: profile.id,
+              email: profile.emails ? profile.emails[0].value : 'no-email'
+            });
+          }
+
+          // Check if user already exists in our database
+          let user = await User.findOne({ 'socialLogin.googleId': profile.id });
+
+          if (user) {
+            // User exists, log them in
+            const userResponse = user.toObject();
+            userResponse.profileCompleted = user.role === 'customer' ? 
+              user.customerProfile.profileCompleted : 
+              user.vendorProfile.profileCompleted;
+            return done(null, userResponse);
+          }
+
+          // If not, check if they signed up with this email before
+          user = await User.findOne({ email: profile.emails[0].value });
+
+          if (user) {
+            // User exists, link their Google account
+            user.socialLogin.googleId = profile.id;
+            user.authProvider = 'google';
+            await user.save({ validateBeforeSave: false });
+            const userResponse = user.toObject();
+            userResponse.profileCompleted = user.role === 'customer' ? 
+              user.customerProfile.profileCompleted : 
+              user.vendorProfile.profileCompleted;
+            return done(null, userResponse);
+          }
+          
+          // If user doesn't exist, create a new one
+          const role = req.query.state || req.body.state;
+
+          if (!role || !['customer', 'vendor'].includes(role)) {
+            return done(new Error('Invalid role specified for Google OAuth'), null);
+          }
+
+          const newUser = new User({
+            email: profile.emails[0].value,
+            authProvider: 'google',
+            socialLogin: { googleId: profile.id },
+            role: role,
+            emailVerified: true,
+            phoneNumber: null,
+          });
+
+          if (role === 'customer') {
+            newUser.customerProfile = {
+              fullName: profile.displayName || '',
+              gender: null,
+              location: {
+                city: null,
+                state: null,
+                country: null,
+                zipCode: null
+              },
+              profileImage: profile.photos && profile.photos.length > 0 ? profile.photos[0].value.replace('?sz=50', '?sz=200') : null,
+              preferences: {
+                categories: [],
+                budgetRange: null,
+                preferredLanguages: [],
+                genderPreference: null,
+                culturalPreferences: []
+              },
+              preferredVendors: [],
+              customerCart: [],
+              profileCompleted: false
+            };
+          }
+
+          if (role === 'vendor') {
+            newUser.vendorProfile = {
+              ownerName: profile.displayName || '',
+              businessName: null,
+              profileImage: profile.photos && profile.photos.length > 0 ? profile.photos[0].value.replace('?sz=50', '?sz=200') : null,
+              businessAddress: {
+                street: null,
+                city: null,
+                state: null,
+                zipCode: null,
+                country: null
+              },
+              timezone: null,
+              geo: { type: 'Point', coordinates: [0, 0] },
+              serviceDescription: null,
+              experienceYears: null,
+              serviceCategories: [],
+              languagesSpoken: [],
+              serviceAreas: [],
+              halalCertification: {
+                hasHalalCert: false,
+                status: 'unverified',
+                renewalReminders: {},
+                certificationFile: null,
+                certificateNumber: null,
+                expiryDate: null,
+                issuingAuthority: null,
+                verificationDate: null,
+              },
+              portfolio: {
+                images: [],
+                videos: [],
+                description: null,
+                beforeAfterPhotos: []
+              },
+              socialLinks: {},
+              availability: {
+                calendar: [],
+                workingDays: [],
+                workingHours: { start: null, end: null },
+                advanceBookingDays: null,
+                blackoutDates: []
+              },
+              bookingRules: {
+                minNoticeHours: null,
+                cancellationPolicy: null,
+                depositRequired: null,
+                depositPercentage: null,
+                paymentTerms: null
+              },
+              pricing: {
+                startingPrice: null,
+                maxPrice: null,
+                currency: 'USD',
+                pricingType: null,
+                packageDeals: []
+              },
+              paymentInfo: {},
+              rating: {
+                average: 0,
+                totalReviews: 0,
+                breakdown: { fiveStar: 0, fourStar: 0, threeStar: 0, twoStar: 0, oneStar: 0 }
+              },
+              approvalHistory: [],
+              stats: {
+                  totalBookings: 0,
+                  completedBookings: 0,
+                  cancelledBookings: 0,
+                  responseTime: 0,
+                  responseRate: 0,
+                  repeatCustomers: 0
+              },
+              verifications: {
+                  businessVerified: false,
+                  backgroundCheckComplete: false,
+                  insuranceVerified: false
+              },
+              team: [],
+              tags: [],
+              profileCompleted: false
+            };
+          }
+
+          await newUser.save({ validateBeforeSave: false });
+          
+          const newUserResponse = newUser.toObject();
+          newUserResponse.profileCompleted = role === 'customer' ? 
+            newUser.customerProfile.profileCompleted : 
+            newUser.vendorProfile.profileCompleted;
+          done(null, newUserResponse);
+
+        } catch (err) {
+          console.error('Mobile Google Strategy Error:', err);
+          done(err, false);
+        }
+      }
+    )
+  );
+  } else {
+    console.log('⚠️  Google Mobile OAuth Strategy not registered (missing credentials)');
+    console.log('   For mobile apps, use the /api/auth/google/mobile/verify endpoint with ID token verification');
+  }
 }; 

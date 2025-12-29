@@ -20,7 +20,10 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: [true, "Password is required"],
+      required: function() {
+        // Password is only required for email-based authentication
+        return this.authProvider === 'email' || !this.authProvider;
+      },
       minlength: [8, "Password must be at least 8 characters"],
       select: false,
     },
@@ -42,7 +45,7 @@ const userSchema = new mongoose.Schema(
     // Authentication & Security (Common)
     authProvider: {
       type: String,
-      enum: ["email", "google", "facebook", "vendor-created"],
+      enum: ["email", "google", "apple", "facebook", "vendor-created"],
       default: "email",
     },
 
@@ -65,6 +68,22 @@ const userSchema = new mongoose.Schema(
         type: String,
         sparse: true,
       },
+      appleId: {
+        type: String,
+        sparse: true,
+      },
+    },
+
+    // Push notification tokens (FCM for Android, APNS for iOS)
+    fcmTokens: {
+      type: [String],
+      default: [],
+    },
+    // Platform info for each token (optional, for better targeting)
+    fcmTokenPlatforms: {
+      type: Map,
+      of: String, // 'android' or 'ios'
+      default: {},
     },
 
     isActive: {
@@ -663,6 +682,7 @@ userSchema.index({ "customerProfile.preferences.categories": 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ "socialLogin.googleId": 1 }, { sparse: true });
 userSchema.index({ "socialLogin.facebookId": 1 }, { sparse: true });
+userSchema.index({ "socialLogin.appleId": 1 }, { sparse: true });
 userSchema.index({ "vendorProfile.businessName": 1 });
 userSchema.index({ "vendorProfile.primaryServiceCategory": 1 });
 userSchema.index({ "vendorProfile.serviceCategories": 1 });

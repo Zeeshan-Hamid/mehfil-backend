@@ -258,15 +258,51 @@ exports.createNotification = catchAsync(async (req, res) => {
       priority: priority || 'medium'
     });
     
+    console.log('📬 Notification created:', {
+      id: notification._id,
+      recipient: notification.recipient,
+      type: notification.type,
+      title: notification.title,
+    });
+    
     await notification.populate('sender', 'role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
     
-  
+    // Fire-and-forget mobile push (properly handle async promise)
+    try {
+      const { sendPushForNotification } = require('../services/notificationPushService');
+      console.log('🔔 [NOTIFICATION TRIGGER] Calling sendPushForNotification for created notification', {
+        notificationId: notification._id,
+        recipientId: notification.recipient,
+        type: notification.type
+      });
+      // Fire and forget, but handle promise rejection properly
+      sendPushForNotification(notification).catch(err => {
+        console.error('❌ [NOTIFICATION TRIGGER] Failed to send push for created notification (async error)', {
+          notificationId: notification._id,
+          error: err.message,
+          stack: err.stack
+        });
+      });
+    } catch (e) {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to trigger push for created notification (sync error)', {
+        notificationId: notification._id,
+        error: e.message,
+        stack: e.stack
+      });
+    }
     
     // Broadcast notification via socket if available
     const socketService = req.app.get('socketService');
     if (socketService) {
-      
+      console.log('📡 [NOTIFICATION TRIGGER] Broadcasting notification via Socket.IO', {
+        notificationId: notification._id,
+        recipientId: notification.recipient
+      });
       socketService.broadcastNotification(notification);
+    } else {
+      console.warn('⚠️ [NOTIFICATION TRIGGER] Socket service not available, skipping Socket.IO broadcast', {
+        notificationId: notification._id
+      });
     }
     
     res.status(201).json({

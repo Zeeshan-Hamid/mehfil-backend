@@ -17,6 +17,10 @@ const phoneValidation = body('phoneNumber')
   .matches(/^[\+]?[0-9\s\-\(\)]{10,17}$/)
   .withMessage('Please enter a valid phone number');
 
+const phoneValidationOptional = body('phoneNumber')
+  .optional({ checkFalsy: true })
+  .trim();
+
 // Customer signup validation
 const validateCustomerSignup = [
   body('fullName')
@@ -28,9 +32,10 @@ const validateCustomerSignup = [
 
   emailValidation,
   passwordValidation,
-  phoneValidation,
+  phoneValidationOptional, // Phone number is optional for customers
 
   body('gender')
+    .optional({ checkFalsy: true })
     .isIn(['male', 'female', 'prefer_not_to_say'])
     .withMessage('Gender must be male, female, or prefer_not_to_say'),
 
@@ -79,7 +84,7 @@ const validateVendorSignup = [
 
   emailValidation,
   passwordValidation,
-  phoneValidation,
+  phoneValidationOptional, // Phone number is optional for vendors - any format allowed
 
   body('street')
     .optional()
@@ -177,6 +182,32 @@ const validateResetPassword = [
     })
 ];
 
+const validateVerifyResetCode = [
+  emailValidation,
+  body('code')
+    .trim()
+    .isLength({ min: 6, max: 6 })
+    .withMessage('Verification code must be 6 digits')
+    .isNumeric()
+    .withMessage('Verification code must contain only numbers')
+];
+
+// Mobile password reset validation (no password confirmation needed - handled on frontend)
+const validateResetPasswordMobile = [
+  emailValidation,
+  body('code')
+    .trim()
+    .isLength({ min: 6, max: 6 })
+    .withMessage('Verification code must be 6 digits')
+    .isNumeric()
+    .withMessage('Verification code must contain only numbers'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters long')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage('Password must contain at least one lowercase letter, one uppercase letter, and one number')
+];
+
 // Change password validation
 const validateChangePassword = [
   body('currentPassword')
@@ -212,5 +243,7 @@ module.exports = {
   validateLogin,
   validateForgotPassword,
   validateResetPassword,
+  validateVerifyResetCode,
+  validateResetPasswordMobile,
   validateChangePassword
 }; 

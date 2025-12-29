@@ -111,13 +111,25 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
   // Get sender details for notification
   const senderUser = await mongoose.model('User').findById(sender).select('role customerProfile.fullName vendorProfile.businessName vendorProfile.ownerName');
   
-  
+  // Get receiver details to log direction
+  const receiverUser = await mongoose.model('User').findById(receiver).select('role');
   
   const senderName = senderUser.role === 'customer' 
     ? senderUser.customerProfile?.fullName 
     : senderUser.vendorProfile?.businessName || senderUser.vendorProfile?.ownerName || 'Vendor';
 
+  const messageDirection = `${senderUser.role} → ${receiverUser?.role || 'unknown'}`;
   
+  console.log('💬 [MESSAGE NOTIFICATION] Creating notification', {
+    senderId: sender,
+    senderRole: senderUser.role,
+    senderName: senderName,
+    receiverId: receiver,
+    receiverRole: receiverUser?.role,
+    direction: messageDirection,
+    messageId: message._id,
+    conversationId: message.conversationId
+  });
 
   const notificationData = {
     recipient: receiver,
@@ -138,6 +150,40 @@ notificationSchema.statics.createMessageNotification = async function(messageDat
   
 
   const notification = await this.create(notificationData);
+
+  console.log('📬 Notification created:', {
+    id: notification._id,
+    recipient: notification.recipient,
+    recipientRole: receiverUser?.role,
+    senderRole: senderUser.role,
+    direction: messageDirection,
+    type: notification.type,
+    title: notification.title,
+  });
+
+  // Fire-and-forget push notification (properly handle async promise)
+  try {
+    const { sendPushForNotification } = require('../services/notificationPushService');
+    console.log('🔔 [NOTIFICATION TRIGGER] Calling sendPushForNotification for message notification', {
+      notificationId: notification._id,
+      recipientId: notification.recipient,
+      type: notification.type
+    });
+    // Fire and forget, but handle promise rejection properly
+    sendPushForNotification(notification).catch(err => {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to send push for message notification (async error)', {
+        notificationId: notification._id,
+        error: err.message,
+        stack: err.stack
+      });
+    });
+  } catch (e) {
+    console.error('❌ [NOTIFICATION TRIGGER] Failed to trigger push for message notification (sync error)', {
+      notificationId: notification._id,
+      error: e.message,
+      stack: e.stack
+    });
+  }
 
   
 
@@ -196,6 +242,37 @@ notificationSchema.statics.createCartNotification = async function(cartData) {
   };
   
   const notification = await this.create(notificationData);
+
+  console.log('📬 Notification created:', {
+    id: notification._id,
+    recipient: notification.recipient,
+    type: notification.type,
+    title: notification.title,
+  });
+
+  // Fire-and-forget push notification (properly handle async promise)
+  try {
+    const { sendPushForNotification } = require('../services/notificationPushService');
+    console.log('🔔 [NOTIFICATION TRIGGER] Calling sendPushForNotification for cart-added notification', {
+      notificationId: notification._id,
+      recipientId: notification.recipient,
+      type: notification.type
+    });
+    // Fire and forget, but handle promise rejection properly
+    sendPushForNotification(notification).catch(err => {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to send push for cart-added notification (async error)', {
+        notificationId: notification._id,
+        error: err.message,
+        stack: err.stack
+      });
+    });
+  } catch (e) {
+    console.error('❌ [NOTIFICATION TRIGGER] Failed to trigger push for cart-added notification (sync error)', {
+      notificationId: notification._id,
+      error: e.message,
+      stack: e.stack
+    });
+  }
   
   return notification;
 };
@@ -252,6 +329,37 @@ notificationSchema.statics.createCartRemovalNotification = async function(cartDa
   };
   
   const notification = await this.create(notificationData);
+
+  console.log('📬 Notification created:', {
+    id: notification._id,
+    recipient: notification.recipient,
+    type: notification.type,
+    title: notification.title,
+  });
+
+  // Fire-and-forget push notification (properly handle async promise)
+  try {
+    const { sendPushForNotification } = require('../services/notificationPushService');
+    console.log('🔔 [NOTIFICATION TRIGGER] Calling sendPushForNotification for cart-removed notification', {
+      notificationId: notification._id,
+      recipientId: notification.recipient,
+      type: notification.type
+    });
+    // Fire and forget, but handle promise rejection properly
+    sendPushForNotification(notification).catch(err => {
+      console.error('❌ [NOTIFICATION TRIGGER] Failed to send push for cart-removed notification (async error)', {
+        notificationId: notification._id,
+        error: err.message,
+        stack: err.stack
+      });
+    });
+  } catch (e) {
+    console.error('❌ [NOTIFICATION TRIGGER] Failed to trigger push for cart-removed notification (sync error)', {
+      notificationId: notification._id,
+      error: e.message,
+      stack: e.stack
+    });
+  }
   
   return notification;
 };

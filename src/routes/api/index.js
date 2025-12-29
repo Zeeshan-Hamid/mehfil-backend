@@ -26,6 +26,10 @@ const paymentRoutes = require('./paymentRoutes');
 const taxRoutes = require('./taxRoutes');
 const blogRoutes = require('./blogRoutes');
 const marketplaceRoutes = require('./marketplaceRoutes');
+
+const shareRoutes = require('./shareRoutes');
+const userRoutes = require('./userRoutes');
+const testRoutes = require('./testRoutes');
 const menuChatbotRoutes = require('./menuChatbotRoutes');
 const sonioxRoutes = require('./sonioxRoutes');
 const aiConsultantRoutes = require('./aiConsultantRoutes');
@@ -45,6 +49,7 @@ const aiRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -87,11 +92,15 @@ router.use('/payments', paymentRoutes);
 router.use('/tax', taxRoutes);
 router.use('/blogs', blogRoutes);
 router.use('/marketplace', marketplaceRoutes);
+router.use('/', shareRoutes);
+router.use('/users', userRoutes);
+router.use('/test', testRoutes);
 router.use('/menu-chatbot', aiRateLimiter, menuChatbotRoutes);
 router.use('/soniox', sonioxRoutes);
 router.use('/ai-consultant', aiRateLimiter, aiConsultantRoutes);
 router.use('/demo-request', demoRequestRoutes);
 router.use('/agent', aiRateLimiter, agentRoutes);
 router.use('/lead-generation', aiRateLimiter, leadGenerationRoutes);
+
 
 module.exports = router; 
