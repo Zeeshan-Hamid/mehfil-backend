@@ -26,9 +26,30 @@ const paymentRoutes = require('./paymentRoutes');
 const taxRoutes = require('./taxRoutes');
 const blogRoutes = require('./blogRoutes');
 const marketplaceRoutes = require('./marketplaceRoutes');
+
 const shareRoutes = require('./shareRoutes');
 const userRoutes = require('./userRoutes');
 const testRoutes = require('./testRoutes');
+const menuChatbotRoutes = require('./menuChatbotRoutes');
+const sonioxRoutes = require('./sonioxRoutes');
+const aiConsultantRoutes = require('./aiConsultantRoutes');
+const demoRequestRoutes = require('./demoRequestRoutes');
+const agentRoutes = require('./agentRoutes');
+const leadGenerationRoutes = require('./leadGenerationRoutes');
+const rateLimit = require('express-rate-limit');
+
+// Rate limiter for AI endpoints - max 12 requests per minute per IP
+const aiRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 12, // Limit each IP to 12 requests per windowMs
+  message: {
+    status: 429,
+    message: 'Too many AI requests, please try again after a minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 
 // Health check endpoint
 router.get('/health', (req, res) => {
@@ -63,7 +84,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/public-vendor', publicVendorRoutes);
 router.use('/customer', customerRoutes);
 router.use('/user-events', userEventRoutes);
-router.use('/chatbot', chatbotRoutes);
+router.use('/chatbot', aiRateLimiter, chatbotRoutes);
 router.use('/invoices', invoiceRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/admin', adminRoutes);
@@ -74,5 +95,12 @@ router.use('/marketplace', marketplaceRoutes);
 router.use('/', shareRoutes);
 router.use('/users', userRoutes);
 router.use('/test', testRoutes);
+router.use('/menu-chatbot', aiRateLimiter, menuChatbotRoutes);
+router.use('/soniox', sonioxRoutes);
+router.use('/ai-consultant', aiRateLimiter, aiConsultantRoutes);
+router.use('/demo-request', demoRequestRoutes);
+router.use('/agent', aiRateLimiter, agentRoutes);
+router.use('/lead-generation', aiRateLimiter, leadGenerationRoutes);
+
 
 module.exports = router; 

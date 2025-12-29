@@ -1,5 +1,8 @@
-const transporter = require('../config/email');
+const resend = require('../config/email');
 const emailTemplate = require('./emailTemplate');
+const { getLogger } = require('../config/logging');
+
+const logger = getLogger(__filename);
 
 class EmailService {
   static formatCurrency(amount, currency = 'usd') {
@@ -99,19 +102,51 @@ class EmailService {
 
     const html = emailTemplate(title, content, button);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: toEmail,
       subject: 'Booking Confirmation - Mehfil',
       html,
     };
 
     try {
-      const info = await transporter.sendMail(message);
+      const info = await resend.emails.send(message);
+      
+      // Check for errors in response (Resend returns errors in response object)
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'booking_confirmation',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: toEmail,
+          },
+          'Resend API error while sending booking confirmation email'
+        );
+        // Do not throw to avoid failing webhook flow
+        return false;
+      }
       
       return true;
     } catch (error) {
-      // Error sending booking confirmation email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'booking_confirmation',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: toEmail,
+        },
+        'Error sending booking confirmation email'
+      );
       // Do not throw to avoid failing webhook flow
       return false;
     }
@@ -129,26 +164,50 @@ class EmailService {
 
     const html = emailTemplate(title, content, button);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: email,
       subject: 'Password Reset Request - Mehfil',
       html,
     };
 
     try {
+      const info = await resend.emails.send(message);
       
-      const startTime = Date.now();
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'password_reset',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending password reset email'
+        );
+        throw new Error(`Failed to send password reset email: ${info.error.message}`);
+      }
       
-      const info = await transporter.sendMail(message);
-      const endTime = Date.now();
-      
-      
-      
-      
-      return true;
+      return info;
     } catch (error) {
-      // Error sending password reset email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'password_reset',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending password reset email'
+      );
       throw new Error('Failed to send password reset email');
     }
   }
@@ -162,18 +221,50 @@ class EmailService {
 
     const html = emailTemplate(title, content);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: email,
       subject: 'Password Reset Successful - Mehfil',
       html,
     };
 
     try {
-      await transporter.sendMail(message);
+      const info = await resend.emails.send(message);
+      
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'password_reset_confirmation',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending password reset confirmation email'
+        );
+        throw new Error(`Failed to send password reset confirmation: ${info.error.message}`);
+      }
+      
       return true;
     } catch (error) {
-      // Error sending password reset confirmation
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'password_reset_confirmation',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending password reset confirmation email'
+      );
       throw new Error('Failed to send password reset confirmation');
     }
   }
@@ -189,18 +280,50 @@ class EmailService {
 
     const html = emailTemplate(title, content, button);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: email,
       subject: 'Email Verification - Mehfil',
       html,
     };
 
     try {
-      await transporter.sendMail(message);
-      return true;
+      const info = await resend.emails.send(message);
+      
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'verification',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending verification email'
+        );
+        throw new Error(`Failed to send verification email: ${info.error.message}`);
+      }
+      
+      return info;
     } catch (error) {
-      // Error sending verification email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'verification',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending verification email'
+      );
       throw new Error('Failed to send verification email');
     }
   }
@@ -213,18 +336,50 @@ class EmailService {
 
     const html = emailTemplate(title, content);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: email,
       subject: 'Email Verified Successfully - Mehfil',
       html,
     };
 
     try {
-      await transporter.sendMail(message);
+      const info = await resend.emails.send(message);
+      
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'verification_success',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: email,
+          },
+          'Resend API error while sending verification success email'
+        );
+        throw new Error(`Failed to send verification success email: ${info.error.message}`);
+      }
+      
       return true;
     } catch (error) {
-      // Error sending verification success email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'verification_success',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: email,
+        },
+        'Error sending verification success email'
+      );
       throw new Error('Failed to send verification success email');
     }
   }
@@ -375,21 +530,52 @@ class EmailService {
 
     const html = emailTemplate(title, content, button);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: adminEmail,
       subject: `Vendor Verification Request: ${businessName || vendorName || vendorEmail} - Mehfil`,
       html,
     };
 
     try {
-      // Attempting to send email to admin
+      const info = await resend.emails.send(message);
       
-      const info = await transporter.sendMail(message);
-      // Vendor verification request email sent successfully
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'vendor_verification_request',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: adminEmail,
+            vendorId,
+          },
+          'Resend API error while sending vendor verification request email'
+        );
+        return false;
+      }
+      
       return true;
     } catch (error) {
-      // Error sending vendor verification request email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'vendor_verification_request',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: adminEmail,
+          vendorId,
+        },
+        'Error sending vendor verification request email'
+      );
       // Do not throw to avoid failing profile completion flow
       return false;
     }
@@ -435,19 +621,50 @@ class EmailService {
 
     const html = emailTemplate(title, content, button);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: vendorEmail,
       subject: 'Vendor Account Verified - Welcome to Mehfil!',
       html,
     };
 
     try {
-      const info = await transporter.sendMail(message);
-      // Vendor verification approval email sent successfully
+      const info = await resend.emails.send(message);
+      
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'vendor_verification_approval',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: vendorEmail,
+          },
+          'Resend API error while sending vendor verification approval email'
+        );
+        return false;
+      }
+      
       return true;
     } catch (error) {
-      // Error sending vendor verification approval email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'vendor_verification_approval',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: vendorEmail,
+        },
+        'Error sending vendor verification approval email'
+      );
       return false;
     }
   }
@@ -496,19 +713,50 @@ class EmailService {
 
     const html = emailTemplate(title, content, button);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: vendorEmail,
       subject: 'Vendor Verification Update - Mehfil',
       html,
     };
 
     try {
-      const info = await transporter.sendMail(message);
-      // Vendor verification rejection email sent successfully
+      const info = await resend.emails.send(message);
+      
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'vendor_verification_rejection',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: vendorEmail,
+          },
+          'Resend API error while sending vendor verification rejection email'
+        );
+        return false;
+      }
+      
       return true;
     } catch (error) {
-      // Error sending vendor verification rejection email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'vendor_verification_rejection',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: vendorEmail,
+        },
+        'Error sending vendor verification rejection email'
+      );
       return false;
     }
   }
@@ -596,19 +844,50 @@ class EmailService {
 
     const html = emailTemplate(title, content, button);
 
+    const fromEmail = process.env.EMAIL_USER || process.env.MAIL_FROM || 'info@mehfil.app';
     const message = {
-      from: `"Mehfil" <${process.env.EMAIL_USER}>`,
+      from: `Mehfil <${fromEmail}>`,
       to: vendorEmail,
       subject: `Cancellation Request - Order ${orderId} - Mehfil`,
       html,
     };
 
     try {
-      const info = await transporter.sendMail(message);
-      // Cancellation request email sent successfully
+      const info = await resend.emails.send(message);
+      
+      // Check for errors in response
+      if (info?.error) {
+        logger.error(
+          {
+            event: 'email_send_error',
+            emailType: 'cancellation_request',
+            error: {
+              type: 'ResendAPIError',
+              statusCode: info.error.statusCode,
+              message: info.error.message,
+            },
+            to: vendorEmail,
+          },
+          'Resend API error while sending cancellation request email'
+        );
+        return false;
+      }
+      
       return true;
     } catch (error) {
-      // Error sending cancellation request email
+      logger.error(
+        {
+          event: 'email_send_error',
+          emailType: 'cancellation_request',
+          error: {
+            type: error?.constructor?.name || 'Error',
+            message: error?.message || 'Unknown error',
+            stack: error?.stack,
+          },
+          to: vendorEmail,
+        },
+        'Error sending cancellation request email'
+      );
       // Do not throw to avoid failing message flow
       return false;
     }

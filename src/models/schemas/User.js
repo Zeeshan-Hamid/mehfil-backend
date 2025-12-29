@@ -106,7 +106,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['pending', 'verified', 'rejected'],
       default: function() {
-        return this.role === 'vendor' ? 'pending' : undefined;
+        return this.role === 'vendor' ? 'verified' : undefined;
       }
     },
 
@@ -738,21 +738,6 @@ userSchema.pre("save", function (next) {
     const { businessName, ownerName, businessAddress, timezone } =
       this.vendorProfile;
     
-    console.log('Vendor profile completion check:', {
-      businessName,
-      ownerName,
-      phoneNumber: this.phoneNumber,
-      timezone,
-      businessAddress,
-      hasAllRequiredFields: !!(
-        businessName &&
-        ownerName &&
-        this.phoneNumber &&
-        businessAddress &&
-        businessAddress.zipCode
-      )
-    });
-    
     if (
       businessName &&
       ownerName &&
@@ -765,28 +750,10 @@ userSchema.pre("save", function (next) {
       this.vendorProfile.profileCompleted = true;
       
       // Send admin verification request if vendor profile is completed, verification is pending, AND email is verified
-      console.log('🔍 Email sending conditions check:', {
-        wasProfileIncomplete,
-        vendorVerificationStatus: this.vendorVerificationStatus,
-        emailVerified: this.emailVerified,
-        email: this.email,
-        shouldSendEmail: wasProfileIncomplete && this.vendorVerificationStatus === 'pending' && this.emailVerified
-      });
-      
       if (wasProfileIncomplete && this.vendorVerificationStatus === 'pending' && this.emailVerified) {
-        console.log('📧 Sending vendor verification request email to admin...');
         // Use setImmediate to avoid blocking the save operation
         setImmediate(async () => {
           try {
-            console.log('📧 Email service called with data:', {
-              vendorEmail: this.email,
-              vendorName: this.vendorProfile.ownerName,
-              businessName: this.vendorProfile.businessName,
-              phoneNumber: this.phoneNumber,
-              businessAddress: this.vendorProfile.businessAddress,
-              vendorId: this._id
-            });
-            
             const EmailService = require('../../services/emailService');
             await EmailService.sendVendorVerificationRequestEmail({
               vendorEmail: this.email,
@@ -796,17 +763,10 @@ userSchema.pre("save", function (next) {
               businessAddress: this.vendorProfile.businessAddress,
               vendorId: this._id
             });
-            console.log('✅ Vendor verification request email sent successfully!');
           } catch (error) {
-            console.error('❌ Failed to send vendor verification request email:', error);
             // Don't fail the save operation if email fails
+            // Error is logged by EmailService
           }
-        });
-      } else {
-        console.log('⏭️ Skipping email send - conditions not met:', {
-          wasProfileIncomplete,
-          vendorVerificationStatus: this.vendorVerificationStatus,
-          emailVerified: this.emailVerified
         });
       }
       

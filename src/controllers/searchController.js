@@ -1,5 +1,21 @@
 const User = require('../models/User');
 const Event = require('../models/Event');
+const SearchLog = require('../models/SearchLog');
+
+// Helper to log search asynchronously
+const logSearch = async (query, type, userId = null, metadata = {}) => {
+    try {
+        await SearchLog.create({
+            query,
+            type,
+            userId,
+            metadata
+        });
+    } catch (error) {
+        // Fail silently so we don't block the user or cause errors
+        console.error('Search logging failed:', error);
+    }
+};
 
 // @desc    Search for vendors by business name
 // @route   GET /api/search/vendors
@@ -9,7 +25,7 @@ const searchVendors = async (req, res) => {
         const { q, page = 1, limit = 10 } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
-        
+
         if (!q) {
             return res.status(400).json({
                 success: false,
@@ -23,9 +39,9 @@ const searchVendors = async (req, res) => {
             role: 'vendor',
             'vendorProfile.businessName': { $regex: q, $options: 'i' }
         })
-        .select('vendorProfile.businessName vendorProfile.ownerName vendorProfile.businessAddress vendorProfile.rating vendorProfile.primaryServiceCategory')
-        .skip((pageNum - 1) * limitNum)
-        .limit(limitNum);
+            .select('vendorProfile.businessName vendorProfile.ownerName vendorProfile.businessAddress vendorProfile.rating vendorProfile.primaryServiceCategory')
+            .skip((pageNum - 1) * limitNum)
+            .limit(limitNum);
 
         // Get total count for pagination info
         const totalCount = await User.countDocuments({
@@ -71,37 +87,37 @@ const searchListings = async (req, res) => {
                 message: 'Search query (q) is required.'
             });
         }
-        
+
         // Instead of combining text search with regex in an $or, we'll:
         // 1. Try text search first (which is more efficient)
         // 2. If not enough results, then try regex search
-        
+
         // Create a regex pattern for the search term
         const searchRegex = new RegExp(q, 'i');
-        
+
         // First attempt: Use text search which is fast and uses the text index
         let listings = await Event.find(
             { $text: { $search: q } },
             { score: { $meta: 'textScore' } }
         )
-        .select('name category description imageUrls location averageRating totalReviews tags')
-        .sort({ score: { $meta: 'textScore' }, averageRating: -1, createdAt: -1 })
-        .populate({
-            path: 'vendor',
-            select: 'vendorProfile.businessName vendorProfile.rating'
-        })
-        .skip((pageNum - 1) * limitNum)
-        .limit(limitNum);
-        
+            .select('name category description imageUrls location averageRating totalReviews tags')
+            .sort({ score: { $meta: 'textScore' }, averageRating: -1, createdAt: -1 })
+            .populate({
+                path: 'vendor',
+                select: 'vendorProfile.businessName vendorProfile.rating'
+            })
+            .skip((pageNum - 1) * limitNum)
+            .limit(limitNum);
+
         // Get total count for text search
         let totalCount = await Event.countDocuments({ $text: { $search: q } });
-        
+
         // If text search didn't return enough results, try regex search
         // This handles partial word matches better
         if (listings.length < limitNum) {
             // Calculate how many more items we need
             const remainingItems = limitNum - listings.length;
-            
+
             // Use regex search on individual fields (avoiding the $or with $text issue)
             const regexListings = await Event.find({
                 $or: [
@@ -114,17 +130,17 @@ const searchListings = async (req, res) => {
                 // Exclude items already found by text search
                 _id: { $nin: listings.map(l => l._id) }
             })
-            .select('name category description imageUrls location averageRating totalReviews tags')
-            .sort({ averageRating: -1, createdAt: -1 })
-            .populate({
-                path: 'vendor',
-                select: 'vendorProfile.businessName vendorProfile.rating'
-            })
-            .limit(remainingItems);
-            
+                .select('name category description imageUrls location averageRating totalReviews tags')
+                .sort({ averageRating: -1, createdAt: -1 })
+                .populate({
+                    path: 'vendor',
+                    select: 'vendorProfile.businessName vendorProfile.rating'
+                })
+                .limit(remainingItems);
+
             // Add regex search results to the listings array
             listings = [...listings, ...regexListings];
-            
+
             // Update total count to include regex matches
             const regexCount = await Event.countDocuments({
                 $or: [
@@ -136,7 +152,7 @@ const searchListings = async (req, res) => {
                 ],
                 _id: { $nin: listings.map(l => l._id) }
             });
-            
+
             totalCount += regexCount;
         }
 
@@ -164,7 +180,44 @@ const searchListings = async (req, res) => {
     }
 };
 
+// @desc    Log a search event (e.g. suggestion click)
+// @route   POST /api/search/log
+// @access  Public
+const logSearchEvent = async (req, res) => {
+    try {
+        const { query, type, metadata } = req.body;
+
+        if (!query || !type) {
+            return res.status(400).json({
+                success: false,
+                message: 'Query and type are required.'
+            });
+        }
+
+        console.log(`[Search Log] Query: "${query}", Type: "${type}", User: ${req.user ? req.user._id : 'Guest'}`);
+
+        await SearchLog.create({
+            query,
+            type,
+            userId: req.user ? req.user._id : null,
+            metadata: metadata || {}
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Search event logged successfully.'
+        });
+    } catch (error) {
+        console.error('Search event logging error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error during search logging.'
+        });
+    }
+};
+
 module.exports = {
     searchVendors,
-    searchListings
+    searchListings,
+    logSearchEvent
 }; 

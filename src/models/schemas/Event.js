@@ -220,6 +220,17 @@ const eventSchema = new mongoose.Schema({
     zipCode: { type: String, required: true, trim: true },
     country: { type: String, default: 'United States', trim: true }
   },
+  serviceArea: {
+    serviceAreaType: {
+      type: String,
+      enum: ['miles', 'within_city', 'within_state', 'within_whole_usa'],
+      default: 'within_city'
+    },
+    serviceAreaMiles: {
+      type: Number,
+      min: [1, 'Service area miles must be at least 1']
+    }
+  },
   reviews: [reviewSchema],
   averageRating: {
     type: Number,
@@ -257,6 +268,9 @@ const eventSchema = new mongoose.Schema({
 
 // Compound index to ensure a vendor cannot create two events with the same name and category.
 eventSchema.index({ vendor: 1, name: 1, category: 1 }, { unique: true });
+
+// Index for service area type for better query performance
+eventSchema.index({ 'serviceArea.serviceAreaType': 1 });
 
 // Text index for searching across multiple fields
 eventSchema.index(
@@ -333,6 +347,35 @@ eventSchema.pre('save', function(next) {
       this.averageRating = 0;
       this.totalReviews = 0;
     }
+  }
+  next();
+});
+
+// Pre-save middleware to handle serviceArea validation and cleanup
+eventSchema.pre('save', function(next) {
+  // If serviceArea exists, ensure proper structure
+  if (this.serviceArea) {
+    // If serviceAreaType is not 'miles', clear serviceAreaMiles
+    if (this.serviceArea.serviceAreaType !== 'miles') {
+      this.serviceArea.serviceAreaMiles = undefined;
+    }
+    
+    // Validate: if serviceAreaType is 'miles', serviceAreaMiles must be provided and >= 1
+    if (this.serviceArea.serviceAreaType === 'miles') {
+      if (!this.serviceArea.serviceAreaMiles || this.serviceArea.serviceAreaMiles < 1) {
+        return next(new Error('serviceAreaMiles is required and must be at least 1 when serviceAreaType is "miles"'));
+      }
+    }
+    
+    // Ensure serviceAreaType has a default value if not set
+    if (!this.serviceArea.serviceAreaType) {
+      this.serviceArea.serviceAreaType = 'within_city';
+    }
+  } else {
+    // If serviceArea doesn't exist, set default
+    this.serviceArea = {
+      serviceAreaType: 'within_city'
+    };
   }
   next();
 });

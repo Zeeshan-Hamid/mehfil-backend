@@ -21,7 +21,7 @@ for (const varName of requiredEnvVars) {
 // Set default value for FRONTEND_URL if not provided
 if (!process.env.FRONTEND_URL) {
   process.env.FRONTEND_URL = 'http://localhost:3000';
-  
+
 }
 
 const express = require('express');
@@ -29,6 +29,13 @@ const cors = require('cors');
 const passport = require('passport');
 const http = require('http');
 const socketIo = require('socket.io');
+
+// Import logging
+const { getLogger } = require('./src/config/logging');
+const requestLoggingMiddleware = require('./src/middleware/requestLogging');
+const performanceLoggingMiddleware = require('./src/middleware/performanceLogging');
+
+const logger = getLogger(__filename);
 
 // Import utilities
 const connectDB = require('./src/config/database');
@@ -46,7 +53,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
+    origin: process.env.NODE_ENV === 'production'
       ? [process.env.FRONTEND_URL, 'https://www.mehfil.app', 'https://mehfil.app']
       : true, // Allow all origins in development
     methods: ["GET", "POST"],
@@ -89,6 +96,12 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), han
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Request logging middleware (must be after body parsers, before other middleware)
+app.use(requestLoggingMiddleware);
+
+// Performance logging middleware
+app.use(performanceLoggingMiddleware({ slowRequestThresholdMs: 1000 }));
+
 // Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -123,7 +136,7 @@ app.get('/.well-known/assetlinks.json', serveAndroidAssetLinks);
 
 // Welcome route
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Welcome to Mehfil API - Event Planning Platform for Muslim & Desi Communities',
     version: '1.0.0',
     documentation: '/api/health'
@@ -140,6 +153,26 @@ app.use('*', (req, res) => {
 
 // Global error handler
 app.use((error, req, res, next) => {
+  const { getLogger } = require('./src/config/logging');
+  const errorLogger = getLogger(__filename);
+
+  errorLogger.error(
+    {
+      event: 'unhandled_error',
+      error: {
+        type: error?.constructor?.name || 'Error',
+        message: error?.message || 'Internal server error',
+        stack: error?.stack,
+      },
+      http: {
+        method: req.method,
+        path: req.path,
+        url: req.originalUrl || req.url,
+      },
+    },
+    `Unhandled error: ${error?.message || 'Unknown error'}`
+  );
+
   res.status(error.status || 500).json({
     success: false,
     message: error.message || 'Internal server error',
@@ -148,11 +181,25 @@ app.use((error, req, res, next) => {
 });
 
 
-// Start server - bind to 0.0.0.0 to be accessible from network
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Network access: Server is accessible on your local network`);
+// Start server
+server.listen(PORT, () => {
+  logger.info(
+    {
+      event: 'server_started',
+      server: {
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development',
+      },
+    },
+    `Server running on port ${PORT}`
+  );
+  logger.info(
+    {
+      event: 'server_environment',
+      environment: process.env.NODE_ENV || 'development',
+    },
+    `Environment: ${process.env.NODE_ENV || 'development'}`
+  );
 });
 
 module.exports = app;
