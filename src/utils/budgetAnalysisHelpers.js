@@ -1,6 +1,46 @@
 const Event = require('../models/schemas/Event');
 
 /**
+ * Trigger frontend cache revalidation after listing update
+ * Single Responsibility: Handles cache invalidation for updated listings
+ * 
+ * @param {Object} event - The updated Event document
+ * @returns {Promise<void>}
+ */
+const triggerCacheRevalidation = async (event) => {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const revalidateSecret = process.env.REVALIDATE_SECRET;
+
+    // Skip if secret is not configured
+    if (!revalidateSecret) {
+        console.log('[Cache] REVALIDATE_SECRET not set, skipping revalidation');
+        return;
+    }
+
+    const listingIdentifier = event.slug || event._id.toString();
+
+    const response = await fetch(`${frontendUrl}/api/revalidate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            secret: revalidateSecret,
+            paths: [
+                `/vendor_listing_details/${listingIdentifier}`,
+                '/vendor_listings'
+            ],
+            tags: [`listing-${event._id}`]
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Revalidation API returned ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log(`[Cache] Revalidated: ${result.paths?.length || 0} paths, ${result.tags?.length || 0} tags`);
+};
+
+/**
  * Analyze budget ranges for a specific event category
  * @param {string} category - Event category to analyze
  * @param {number} months - Number of months to look back (default: 2)
@@ -1113,6 +1153,11 @@ const updateVendorListing = async (vendorId, listingName, updateData) => {
                 message: `No listing found matching "${listingName}" to update.`
             };
         }
+
+        // Trigger frontend cache revalidation (non-blocking)
+        triggerCacheRevalidation(event).catch(err => {
+            console.warn('Cache revalidation failed (non-blocking):', err.message);
+        });
 
         return {
             success: true,
