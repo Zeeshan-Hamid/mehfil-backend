@@ -824,6 +824,16 @@ const getVendorListingDetails = async (vendorId, listingName) => {
             });
         }
 
+        // Check offerings specifically
+        completeness.hasOfferings = event.offerings && event.offerings.length > 0;
+        if (!completeness.hasOfferings) {
+            suggestions.push({
+                type: 'important',
+                issue: 'No offerings listed',
+                suggestion: 'List your specific offerings (e.g. "Bridal Makeup", "Party Henna") to help users find you.'
+            });
+        }
+
 
 
         // Check reviews
@@ -997,7 +1007,17 @@ const auditVendorListings = async (vendorId) => {
 
 
 
-            // 6. Services/Offerings
+            // 6. Services/Offerings Audit (New Requirement)
+            const hasServices = event.services && event.services.length > 0;
+            const hasOfferings = event.offerings && event.offerings.length > 0;
+
+            if (!hasOfferings && !hasServices) {
+                issues.push({ severity: 'critical', area: 'Services/Offerings', issue: 'No offerings listed! You must specify what you provide', impact: -25 });
+                score -= 25;
+            } else if ((event.offerings ? event.offerings.length : 0) + (event.services ? event.services.length : 0) < 3) {
+                issues.push({ severity: 'important', area: 'Services/Offerings', issue: 'Too few offerings listed. List at least 5 items to show your range', impact: -10 });
+                score -= 10;
+            }
             const servicesCount = (event.services ? event.services.length : 0) + (event.offerings ? event.offerings.length : 0);
             if (servicesCount === 0) {
                 issues.push({ severity: 'important', area: 'Services', issue: 'No services listed. Tell clients exactly what you provide', impact: -12 });
