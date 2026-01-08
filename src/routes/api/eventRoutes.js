@@ -13,6 +13,7 @@ const {
   getSimilarEvents,
   getTopCategories
 } = require('../../controllers/eventController');
+const { registerEventAccess } = require('../../controllers/eventDataController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 
 
@@ -20,6 +21,7 @@ const { uploadInMemory } = require('../../services/fileUploadService');
 router.get('/', getAllEvents);
 router.get('/marketplace', getAllEvents);
 router.get('/categories', getTopCategories);
+router.post('/register-access', registerEventAccess);
 
 // --- PROTECTED VENDOR-SPECIFIC ROUTES ---
 // This route must come before the general '/:id' route to be matched correctly
