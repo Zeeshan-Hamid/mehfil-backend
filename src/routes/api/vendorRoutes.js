@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, restrictTo } = require('../../middleware/authMiddleware');
 const { getVendorReviews } = require('../../controllers/reviewController');
-const { getCurrentVendorProfile, updateVendorGeneralProfile } = require('../../controllers/vendorController');
+const { getCurrentVendorProfile, updateVendorGeneralProfile, deleteVendorAccount } = require('../../controllers/vendorController');
 const { getAvailability, updateAvailability } = require('../../controllers/availabilityController');
 const { uploadInMemory } = require('../../services/fileUploadService');
 const { validateVendorGeneralProfile } = require('../../validators/vendorValidators');
@@ -25,5 +25,10 @@ router.get('/reviews', getVendorReviews);
 // Availability Routes
 router.get('/availability/:year/:month', getAvailability);
 router.post('/availability', updateAvailability);
+
+// @route   DELETE /api/vendor/account
+// @desc    Permanently delete vendor account and related data
+// @access  Private (Vendors only)
+router.delete('/account', deleteVendorAccount);
 
 module.exports = router;
