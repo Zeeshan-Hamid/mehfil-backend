@@ -229,6 +229,7 @@ const eventSchema = new mongoose.Schema({
     serviceAreaMiles: {
       type: Number,
       min: [1, 'Service area miles must be at least 1']
+      // Optional; required only when serviceAreaType is 'miles' (enforced by validator below)
     }
   },
   reviews: [reviewSchema],
@@ -265,6 +266,13 @@ const eventSchema = new mongoose.Schema({
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
+
+// When service area type is "miles", user must provide serviceAreaMiles (whole number >= 1)
+eventSchema.path('serviceArea').validate(function(value) {
+  if (!value || value.serviceAreaType !== 'miles') return true;
+  const num = value.serviceAreaMiles;
+  return num != null && !Number.isNaN(Number(num)) && Number(num) >= 1;
+}, 'When service area type is "miles", please enter the number of miles (at least 1).');
 
 // Compound index to ensure a vendor cannot create two events with the same name and category.
 eventSchema.index({ vendor: 1, name: 1, category: 1 }, { unique: true });
