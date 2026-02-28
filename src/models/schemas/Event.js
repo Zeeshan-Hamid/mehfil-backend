@@ -268,11 +268,16 @@ const eventSchema = new mongoose.Schema({
 });
 
 // When service area type is "miles", user must provide serviceAreaMiles (whole number >= 1)
-eventSchema.path('serviceArea').validate(function(value) {
-  if (!value || value.serviceAreaType !== 'miles') return true;
-  const num = value.serviceAreaMiles;
-  return num != null && !Number.isNaN(Number(num)) && Number(num) >= 1;
-}, 'When service area type is "miles", please enter the number of miles (at least 1).');
+eventSchema.pre('save', function(next) {
+  const sa = this.serviceArea;
+  if (sa && sa.serviceAreaType === 'miles') {
+    const num = sa.serviceAreaMiles;
+    if (num == null || Number.isNaN(Number(num)) || Number(num) < 1) {
+      return next(new Error('When service area type is "miles", please enter the number of miles (at least 1).'));
+    }
+  }
+  next();
+});
 
 // Compound index to ensure a vendor cannot create two events with the same name and category.
 eventSchema.index({ vendor: 1, name: 1, category: 1 }, { unique: true });
